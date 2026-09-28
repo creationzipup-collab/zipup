@@ -1,7 +1,7 @@
 "use client";
 
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookText, Languages, Megaphone, Minus, MonitorUp, Plus, Sparkles, Wand2 } from "lucide-react";
+import { BookText, Languages, Megaphone, Minus, MonitorUp, Pencil, Plus, Sparkles, Wand2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 import { toast } from "sonner";
@@ -20,7 +20,9 @@ import { EMPTY_INPUTS, type RefAsset, ReferenceSlots, type StudioInputs } from "
 import { FinalizeDialog, ResultsFeed } from "@/components/studio/results-feed";
 import { Button } from "@/components/ui/button";
 import { Segmented, Select } from "@/components/ui/controls";
-import { Tip } from "@/components/ui/menu";
+import { Popover, PopoverContent, PopoverTrigger, Tip } from "@/components/ui/menu";
+import { NameInput, NewCutForm, refreshAfterRename, renameCut } from "@/components/cuts/cut-name";
+import { isCodeLike } from "@/lib/cuts";
 import {
   createGenerationRequest,
   isActive,
@@ -195,14 +197,34 @@ export function Studio({
   const doc: DeskDoc | null = docData
     ? { id: docData.id, title: docLabel, version: docData.version, visibility: "private", canAddVersion: docData.canAddVersion, baseText: loaded?.text ?? docData.baseText, baseVersion: loaded?.version }
     : null;
-  async function addCut() {
+  const [newCutOpen, setNewCutOpen] = React.useState(false);
+  const [renameOpen, setRenameOpen] = React.useState(false);
+  async function addCut(code: string) {
     try {
-      const r = await fetchJson<{ items: { id: string; code: string }[] }>(`/api/projects/${projectId}/cuts`, { method: "POST", body: JSON.stringify({ count: 1 }) });
+      const r = await fetchJson<{ items: { id: string; code: string }[] }>(`/api/projects/${projectId}/cuts`, { method: "POST", body: JSON.stringify({ count: 1, code }) });
       await qc.invalidateQueries({ queryKey: ["cut-options", projectId] });
+      void qc.invalidateQueries({ queryKey: ["cut-board", projectId] });
       setCutByProject((m) => ({ ...m, [projectId]: r.items[0].id }));
-      toast.success(`${r.items[0].code}를 만들고 골랐어요.`);
+      toast.success(`"${r.items[0].code}" 컷을 만들고 골랐어요.`);
+      setNewCutOpen(false);
+      return true;
     } catch (e) {
       toast.error((e as Error).message);
+      return false;
+    }
+  }
+  async function renameCurrentCut(name: string) {
+    if (!cutId) return false;
+    try {
+      await renameCut(cutId, name);
+      await qc.invalidateQueries({ queryKey: ["cut-options", projectId] });
+      refreshAfterRename(qc);
+      toast.success(`이름을 바꿨어요: ${name}`);
+      setRenameOpen(false);
+      return true;
+    } catch (e) {
+      toast.error((e as Error).message);
+      return false;
     }
   }
 
@@ -677,7 +699,7 @@ export function Studio({
 
               {/* 작업 위치: 프로젝트 / 컷 — 결과는 여기에 테이크로 쌓이고, 버전도 이 컷 안에서만 올라가요 */}
               <div className="corners flex flex-wrap items-center gap-x-2 gap-y-2 rounded-2xl border border-line bg-white/[0.015] px-3 py-2.5">
-                <span className="hidden font-mono text-[10px] uppercase tracking-[0.2em] text-fg-4 sm:inline">작업 위치</span>
+                <span className="hidden text-[11px] text-fg-4 sm:inline">작업 위치</span>
                 <Select
                   size="sm"
                   value={projectId}
@@ -694,17 +716,40 @@ export function Studio({
                     { value: "none", label: "컷 없이", hint: "프로젝트에 바로" },
                     ...cutOptions.map((c) => ({ value: c.id, label: c.title ? `${c.code} · ${c.title}` : c.code })),
                   ]}
-                  className={cn("min-w-0 max-w-[220px] flex-1 whitespace-nowrap rounded-full border-transparent bg-transparent hover:bg-white/[0.04] [&>span]:truncate", cutId && "font-mono text-accent")}
+                  className={cn("min-w-0 max-w-[220px] flex-1 whitespace-nowrap rounded-full border-transparent bg-transparent hover:bg-white/[0.04] [&>span]:truncate", cutId && "text-accent", isCodeLike(cutCode) && "font-mono")}
                 />
-                <Tip content="다음 번호로 컷 만들기">
-                  <Button variant="ghost" size="icon-xs" onClick={() => void addCut()} aria-label="새 컷">
-                    <Plus />
-                  </Button>
-                </Tip>
+                {cutId && cutCode && (
+                  <Popover open={renameOpen} onOpenChange={setRenameOpen}>
+                    <Tip content="컷 이름 바꾸기">
+                      <PopoverTrigger asChild>
+                        <Button variant="ghost" size="icon-xs" aria-label="컷 이름 바꾸기">
+                          <Pencil />
+                        </Button>
+                      </PopoverTrigger>
+                    </Tip>
+                    <PopoverContent align="start" className="w-[280px] p-3">
+                      <p className="mb-2 text-[12px] text-fg-3">컷 이름 — 바꾸면 이 컷 파일 이름도 새 이름으로 바뀌어요</p>
+                      <NameInput key={cutId} initial={cutCode} className="h-9 w-full text-[13.5px]" onCancel={() => setRenameOpen(false)} onSubmit={renameCurrentCut} />
+                    </PopoverContent>
+                  </Popover>
+                )}
+                <Popover open={newCutOpen} onOpenChange={setNewCutOpen}>
+                  <Tip content="새 컷">
+                    <PopoverTrigger asChild>
+                      <Button variant="ghost" size="icon-xs" aria-label="새 컷">
+                        <Plus />
+                      </Button>
+                    </PopoverTrigger>
+                  </Tip>
+                  <PopoverContent align="start" className="w-[280px] p-3">
+                    <p className="mb-2 text-[12.5px] font-semibold">새 컷</p>
+                    {newCutOpen && <NewCutForm compact existing={cutOptions.map((c) => c.code)} onCreate={({ code }) => addCut(code)} />}
+                  </PopoverContent>
+                </Popover>
                 <span className="ml-auto flex items-center gap-2 text-[11.5px] text-fg-4">
                   {doc ? (
                     <>
-                      <span className={cn("rounded-full border border-accent/40 bg-accent/10 px-2 py-px text-[10.5px] text-accent", cutCode && "font-mono")}>
+                      <span className={cn("max-w-[220px] truncate rounded-full border border-accent/40 bg-accent/10 px-2 py-px text-[10.5px] text-accent", isCodeLike(cutCode) && "font-mono")}>
                         {docLabel} v{doc.baseVersion ?? doc.version}
                       </span>
                       <span className="hidden sm:inline">버전은 {docLabel} 안에서만 쌓여요</span>

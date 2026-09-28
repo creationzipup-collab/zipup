@@ -6,6 +6,7 @@ import * as React from "react";
 import { useNow } from "@/lib/client/use-now";
 import type { CutDTO } from "@/lib/services/cuts";
 import { CUT_STATUS_LABEL } from "@/lib/types";
+import { isCodeLike } from "@/lib/cuts";
 import { cn } from "@/lib/utils";
 
 const DAY = 86_400_000;
@@ -109,7 +110,9 @@ export function CutTimeline({ cuts, onOpen }: { cuts: CutDTO[]; onOpen: (id: str
                 return (
                 <li key={c.id} className="grid grid-cols-[148px_minmax(0,1fr)] items-center">
                   <button type="button" onClick={() => onOpen(c.id)} className="min-w-0 pr-3 text-left">
-                    <span className="block font-mono text-[12.5px] tracking-[0.02em] text-fg hover:text-accent">{c.code}</span>
+                    <span className={cn("block truncate text-[12.5px] text-fg hover:text-accent", isCodeLike(c.code) ? "font-mono tracking-[0.02em]" : "font-medium")} title={c.code}>
+                      {c.code}
+                    </span>
                     <span className="block truncate text-[11px] text-fg-4">{c.title || CUT_STATUS_LABEL[c.status]}</span>
                   </button>
                   <div className="relative h-10">

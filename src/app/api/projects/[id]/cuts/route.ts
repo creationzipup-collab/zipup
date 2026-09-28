@@ -16,7 +16,7 @@ export const GET = handle(async (req: NextRequest, ctx: Ctx) => {
 });
 
 const Create = z.object({
-  code: z.string().max(24).nullish(),
+  code: z.string().max(80).nullish(),
   title: z.string().max(80).nullish(),
   count: z.number().int().min(1).max(200).optional(),
 });

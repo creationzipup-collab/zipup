@@ -8,7 +8,7 @@ import { apiUser } from "@/lib/session";
 type Ctx = { params: Promise<{ id: string }> };
 
 const Patch = z.object({
-  code: z.string().min(1).max(24).optional(),
+  code: z.string().min(1).max(80).optional(),
   title: z.string().max(80).nullish(),
   note: z.string().max(2000).nullish(),
   status: z.enum(["todo", "wip", "review", "done"]).optional(),

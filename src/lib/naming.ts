@@ -6,7 +6,7 @@
  */
 export const FILENAME_TOKENS: { token: string; label: string; example: string }[] = [
   { token: "{project}", label: "프로젝트 이름", example: "신제품런칭" },
-  { token: "{cut}", label: "컷 번호", example: "C003" },
+  { token: "{cut}", label: "컷 이름", example: "C003" },
   { token: "{take}", label: "테이크", example: "T07" },
   { token: "{team}", label: "팀 이름", example: "AI제작팀" },
   { token: "{user}", label: "만든 사람", example: "홍길동" },
@@ -23,7 +23,7 @@ export const FILENAME_TOKENS: { token: string; label: string; example: string }[
 
 export type NameContext = {
   project: string;
-  /** 컷 번호 (컷에 들어간 클립만) */
+  /** 컷 이름 (컷에 들어간 클립만) */
   cut?: string | null;
   take?: number | null;
   team?: string | null;

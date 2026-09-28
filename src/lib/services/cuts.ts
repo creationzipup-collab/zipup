@@ -1,8 +1,8 @@
 import "server-only";
 
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 
-import { nextCutCodes, normalizeCutCode, ratioLabel } from "@/lib/cuts";
+import { cutSeries, nextCutCodes, normalizeCutName, ratioLabel, sameCutName } from "@/lib/cuts";
 import { db } from "@/lib/db";
 import { assets, cuts, generations, projects, teams, user } from "@/lib/db/schema";
 import { badRequest, forbidden, notFound } from "@/lib/errors";
@@ -226,10 +226,14 @@ export async function createCuts(u: CurrentUser, projectId: string, input: { cod
   const count = Math.max(1, Math.min(200, Math.round(input.count ?? 1)));
   let codes: string[];
   if (input.code?.trim()) {
-    const code = normalizeCutCode(input.code);
-    if (!code) throw badRequest("컷 번호를 적어 주세요.");
-    if (existing.some((c) => c.code.toUpperCase() === code)) throw badRequest(`${code}는 이미 있는 컷 번호예요.`);
-    codes = count > 1 ? [code, ...nextCutCodes([...existing.map((c) => c.code), code], count - 1)] : [code];
+    const code = normalizeCutName(input.code);
+    if (!code) throw badRequest("컷 이름을 적어 주세요.");
+    if (existing.some((c) => sameCutName(c.code, code))) throw badRequest(`"${code}" 컷이 이미 있어요.`);
+    codes = cutSeries(
+      code,
+      count,
+      existing.map((c) => c.code),
+    );
   } else {
     codes = nextCutCodes(
       existing.map((c) => c.code),
@@ -256,14 +260,14 @@ export async function updateCut(
   const { cut } = await requireCut(u, cutId, "editor");
   const set: Partial<typeof cuts.$inferInsert> = {};
   if (patch.code !== undefined) {
-    const code = normalizeCutCode(patch.code);
-    if (!code) throw badRequest("컷 번호를 적어 주세요.");
+    const code = normalizeCutName(patch.code);
+    if (!code) throw badRequest("컷 이름을 적어 주세요.");
     if (code !== cut.code) {
       const [dup] = await db
         .select({ id: cuts.id })
         .from(cuts)
-        .where(and(eq(cuts.projectId, cut.projectId), sql`upper(${cuts.code}) = ${code}`));
-      if (dup) throw badRequest(`${code}는 이미 있는 컷 번호예요.`);
+        .where(and(eq(cuts.projectId, cut.projectId), ne(cuts.id, cut.id), sql`lower(${cuts.code}) = lower(${code})`));
+      if (dup) throw badRequest(`"${code}" 컷이 이미 있어요.`);
       set.code = code;
     }
   }
@@ -351,7 +355,7 @@ export async function moveAssetsToCut(u: CurrentUser, assetIds: string[], cutId:
 
 /* ---------------------------------- 파일 이름 ---------------------------------- */
 
-/** 컷 번호가 바뀐 뒤 그 컷 클립들의 이름 다시 짓기 */
+/** 컷 이름이 바뀐 뒤 그 컷 클립들의 파일 이름 다시 짓기 */
 async function renameCutAssets(cutId: string) {
   const rows = await db.select({ id: assets.id }).from(assets).where(eq(assets.cutId, cutId));
   await renameAssets(rows.map((r) => r.id));

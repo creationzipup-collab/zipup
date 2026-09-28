@@ -1,6 +1,6 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
   ArrowLeft,
@@ -33,6 +33,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/contro
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { EmptyState, TimeAgo } from "@/components/ui/misc";
 import { ACCEPT_UPLOADS } from "@/lib/uploads";
+import type { CutBoard } from "@/lib/services/cuts";
 import type { AccessLevel } from "@/lib/services/access";
 import { VISIBILITY_LABEL, type Visibility } from "@/lib/types";
 import { fetchJson } from "@/lib/utils";
@@ -78,6 +79,12 @@ export function ProjectView({
 }) {
   const router = useRouter();
   const qc = useQueryClient();
+  // 컷 탭 숫자: 컷 보드가 불러온 값이 있으면 그걸 따라가요 (만들거나 지우면 바로 바뀌게). 여기서 따로 불러오지는 않아요
+  const liveCutCount = useQuery({
+    queryKey: ["cut-board", data.project.id],
+    queryFn: () => fetchJson<CutBoard>(`/api/projects/${data.project.id}/cuts`),
+    enabled: false,
+  }).data?.cuts.length;
   const p = data.project;
   const canEdit = data.level === "owner" || data.level === "editor";
   const canManage = data.level === "owner";
@@ -254,7 +261,7 @@ export function ProjectView({
       <div className="mx-auto w-full max-w-[1800px] px-4 py-5 sm:px-8">
         <Tabs value={tab} onValueChange={(t) => { setTab(t); setCollection(null); }}>
           <TabsList className="mb-5">
-            <TabsTrigger value="cuts"><Clapperboard /> 컷 <span className="font-mono text-[11px] text-fg-4">{data.cutCount}</span></TabsTrigger>
+            <TabsTrigger value="cuts"><Clapperboard /> 컷 <span className="font-mono text-[11px] text-fg-4">{liveCutCount ?? data.cutCount}</span></TabsTrigger>
             <TabsTrigger value="assets"><ImagePlus /> 클립 전체</TabsTrigger>
             <TabsTrigger value="collections"><Layers /> 컬렉션 <span className="font-mono text-[11px] text-fg-4">{data.collections.length}</span></TabsTrigger>
             <TabsTrigger value="canvases"><Workflow /> 캔버스 <span className="font-mono text-[11px] text-fg-4">{data.canvases.length}</span></TabsTrigger>

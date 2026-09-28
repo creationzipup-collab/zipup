@@ -35,7 +35,7 @@ export type ParsedQuery = {
   minRating?: number;
   exactRating?: number;
   flags: ("pick" | "reject" | "keep" | "none")[];
-  /** 컷 번호 */
+  /** 컷 이름 */
   cuts: string[];
   colors: ColorLabel[];
   favorite?: boolean;
@@ -217,7 +217,7 @@ export function parseQuery(input: string, now = new Date()): ParsedQuery {
           q.teams.push(value);
           break;
         case "cut":
-          q.cuts.push(value.toUpperCase());
+          q.cuts.push(value.replace(/\s+/g, " ").trim().toUpperCase());
           break;
         case "rating": {
           const n = Number(value.replace("+", ""));
@@ -325,7 +325,7 @@ export const SEARCH_HELP: { syntax: string; desc: string }[] = [
   { syntax: "model:seedream", desc: "모델 (시드림, 나노바나나, gpt, h3, 시댄스)" },
   { syntax: "project:신제품", desc: "프로젝트 이름" },
   { syntax: "is:video · is:ok · is:ng · is:keep", desc: "영상 / OK / NG / KEEP" },
-  { syntax: "cut:C003", desc: "컷 번호" },
+  { syntax: 'cut:C003 · cut:"오프닝 시퀀스"', desc: "컷 이름" },
   { syntax: "★4  또는  rating>=4", desc: "별점 4점 이상" },
   { syntax: "color:red", desc: "컬러 라벨" },
   { syntax: "date:week · after:2026-09-01", desc: "기간" },

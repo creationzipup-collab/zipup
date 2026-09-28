@@ -18,6 +18,7 @@ import { useConfirm } from "@/components/ui/confirm";
 import { Select } from "@/components/ui/controls";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Avatar, TimeAgo } from "@/components/ui/misc";
+import { isCodeLike } from "@/lib/cuts";
 import { getModel } from "@/lib/models/registry";
 import type { LibraryItem, LibraryTab, PromptMessageDTO } from "@/lib/services/prompt-docs";
 import { cn, fetchJson } from "@/lib/utils";
@@ -209,7 +210,7 @@ export function PromptLibrary({
                 <div key={p.id} className="mt-1.5 flex flex-col gap-0.5">
                   <OriginItem active={origin === `p:${p.id}`} onClick={() => setOrigin(`p:${p.id}`)} label={p.label} count={p.count} strong />
                   {p.cuts.map((c) => (
-                    <OriginItem key={c.key} active={origin === `c:${c.key}`} onClick={() => setOrigin(`c:${c.key}`)} label={c.code} count={c.count} mono indent />
+                    <OriginItem key={c.key} active={origin === `c:${c.key}`} onClick={() => setOrigin(`c:${c.key}`)} label={c.code} count={c.count} mono={isCodeLike(c.code)} indent />
                   ))}
                 </div>
               ))}

@@ -12,6 +12,7 @@ import { HeroPrompt } from "@/components/home/hero-prompt";
 import { TimeAgo } from "@/components/ui/misc";
 import type { HomeBoard, HomeCut, HomeTake } from "@/lib/services/home";
 import { CUT_STATUS_LABEL, type CutStatus } from "@/lib/types";
+import { isCodeLike } from "@/lib/cuts";
 import { cn } from "@/lib/utils";
 
 const EASE = [0.2, 0.8, 0.2, 1] as const;
@@ -110,7 +111,9 @@ export function ActiveCuts({ cuts }: { cuts: HomeCut[] }) {
           >
             <span aria-hidden className="absolute inset-y-2 left-0 w-px origin-center scale-y-0 bg-accent shadow-[0_0_8px_var(--accent-glow)] transition-transform duration-300 group-hover:scale-y-100" />
             <span className="flex min-w-0 items-center gap-4">
-              <span className="w-[68px] shrink-0 font-mono text-[15px] tracking-[0.02em] text-fg transition group-hover:text-accent">{c.code}</span>
+              <span className={cn("min-w-[68px] max-w-[180px] shrink-0 truncate text-[15px] text-fg transition group-hover:text-accent", isCodeLike(c.code) ? "font-mono tracking-[0.02em]" : "font-medium")} title={c.code}>
+                {c.code}
+              </span>
               <span className="min-w-0">
                 <span className="flex items-center gap-2">
                   <span className="truncate text-[13.5px] font-medium">{c.title || <span className="text-fg-4">제목 없음</span>}</span>

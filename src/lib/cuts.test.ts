@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { nextCutCodes, normalizeCutCode, ratioLabel } from "./cuts";
+import { cutSeries, isCodeLike, nextCutCodes, normalizeCutName, ratioLabel, sameCutName } from "./cuts";
 
 describe("nextCutCodes", () => {
   it("starts at C001", () => {
@@ -19,10 +19,45 @@ describe("nextCutCodes", () => {
   });
 });
 
-describe("normalizeCutCode", () => {
-  it("uppercases and removes risky characters", () => {
-    expect(normalizeCutCode(" s02 c05 ")).toBe("S02_C05");
-    expect(normalizeCutCode("c/01:a")).toBe("C01A");
+describe("normalizeCutName", () => {
+  it("keeps the name as typed, only dropping characters files can't use", () => {
+    expect(normalizeCutName("  오프닝   시퀀스 ")).toBe("오프닝 시퀀스");
+    expect(normalizeCutName("Seq 03 · night")).toBe("Seq 03 · night");
+    expect(normalizeCutName("c/01:a")).toBe("c01a");
+    expect(normalizeCutName("   ")).toBe("");
+  });
+
+  it("caps the length", () => {
+    expect(normalizeCutName("가".repeat(60))).toHaveLength(40);
+  });
+
+  it("treats case and spacing differences as the same name", () => {
+    expect(sameCutName("seq 01", "SEQ  01")).toBe(true);
+    expect(sameCutName("오프닝", "오프닝 2")).toBe(false);
+  });
+});
+
+describe("cutSeries", () => {
+  it("continues a trailing number", () => {
+    expect(cutSeries("SEQ_08", 3)).toEqual(["SEQ_08", "SEQ_09", "SEQ_10"]);
+    expect(cutSeries("S02_C05", 2, ["S02_C06"])).toEqual(["S02_C05", "S02_C07"]);
+  });
+
+  it("numbers names without a trailing number", () => {
+    expect(cutSeries("오프닝", 3)).toEqual(["오프닝", "오프닝 2", "오프닝 3"]);
+  });
+
+  it("falls back to the next suggestions when empty", () => {
+    expect(cutSeries("  ", 2, ["C001"])).toEqual(["C002", "C003"]);
+  });
+});
+
+describe("isCodeLike", () => {
+  it("is true only for ASCII names without spaces", () => {
+    expect(isCodeLike("S02_C05")).toBe(true);
+    expect(isCodeLike("오프닝")).toBe(false);
+    expect(isCodeLike("Seq 03")).toBe(false);
+    expect(isCodeLike(null)).toBe(false);
   });
 });
 

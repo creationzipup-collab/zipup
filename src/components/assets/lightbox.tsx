@@ -34,6 +34,7 @@ import { Avatar, Kbd, TimeAgo } from "@/components/ui/misc";
 import { downloadUrl, useAssetMutations, type AssetPatch } from "@/lib/client/assets";
 import { getModel } from "@/lib/models/registry";
 import type { AssetListItem } from "@/lib/services/library";
+import { isCodeLike } from "@/lib/cuts";
 import { cn, fetchJson, formatBytes, formatDuration, usd } from "@/lib/utils";
 
 export type LightboxItem = Pick<AssetListItem, "id" | "kind" | "urls" | "width" | "height" | "durationSec" | "filename">;
@@ -396,7 +397,7 @@ export function Lightbox({
                   {detail.cutCode && (
                     <>
                       <dt className="text-fg-4">컷 · 테이크</dt>
-                      <dd className="font-mono text-fg-2">
+                      <dd className={cn("truncate text-fg-2", isCodeLike(detail.cutCode) && "font-mono")} title={detail.cutCode}>
                         {detail.cutCode}
                         {detail.take ? ` · T${String(detail.take).padStart(2, "0")}` : ""}
                       </dd>

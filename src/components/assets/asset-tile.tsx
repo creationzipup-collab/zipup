@@ -7,6 +7,7 @@ import { MediaThumb } from "@/components/assets/media";
 import { colorHex, VerdictBadge } from "@/components/assets/selection-controls";
 import { getModel } from "@/lib/models/registry";
 import type { AssetListItem } from "@/lib/services/library";
+import { isCodeLike } from "@/lib/cuts";
 import { cn } from "@/lib/utils";
 
 export const AssetTile = React.memo(function AssetTile({
@@ -88,7 +89,12 @@ export const AssetTile = React.memo(function AssetTile({
 
       {/* 컷·테이크 */}
       {a.cutCode && !(selecting || selected) && (
-        <span className="pointer-events-none absolute left-2 top-2 rounded-[5px] bg-black/55 px-1.5 py-[2px] font-mono text-[9.5px] font-medium tracking-[0.08em] text-white/90 backdrop-blur transition-opacity group-hover:opacity-0">
+        <span
+          className={cn(
+            "pointer-events-none absolute left-2 top-2 max-w-[75%] truncate rounded-[5px] bg-black/55 px-1.5 py-[2px] text-[9.5px] font-medium text-white/90 backdrop-blur transition-opacity group-hover:opacity-0",
+            isCodeLike(a.cutCode) ? "font-mono tracking-[0.08em]" : "text-[10px]",
+          )}
+        >
           {a.cutCode}
           {a.take ? ` · T${String(a.take).padStart(2, "0")}` : ""}
         </span>

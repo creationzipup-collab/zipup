@@ -35,6 +35,7 @@ import { useNow } from "@/lib/client/use-now";
 import { cancelGenerationRequest, isActive, usePushGenerations, type GenerationDTO } from "@/lib/client/generations";
 import { getModel, seedanceCompleteUsd, seedanceTokens } from "@/lib/models/registry";
 import { FLAG_LABEL, GENERATION_STATUS_LABEL, type Flag } from "@/lib/types";
+import { isCodeLike } from "@/lib/cuts";
 import { cn, fetchJson, usd } from "@/lib/utils";
 
 type Output = GenerationDTO["outputs"][number];
@@ -293,9 +294,9 @@ function CutChip({ code, takes }: { code: string; takes: number[] }) {
   const fmt = (n: number) => `T${String(n).padStart(2, "0")}`;
   const range = t.length ? (t.length === 1 ? fmt(t[0]) : `${fmt(t[0])}–${fmt(t.at(-1)!)}`) : null;
   return (
-    <span className="inline-flex h-[22px] items-center gap-1 rounded-md border border-line-2 px-1.5 font-mono text-[10.5px] font-semibold tracking-[0.06em] text-fg-2">
-      {code}
-      {range && <span className="font-normal text-fg-3">· {range}</span>}
+    <span className="inline-flex h-[22px] max-w-[260px] items-center gap-1 rounded-md border border-line-2 px-1.5 text-[10.5px] font-semibold text-fg-2">
+      <span className={cn("truncate", isCodeLike(code) && "font-mono tracking-[0.06em]")}>{code}</span>
+      {range && <span className="shrink-0 font-mono font-normal text-fg-3">· {range}</span>}
     </span>
   );
 }

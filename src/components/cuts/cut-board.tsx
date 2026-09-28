@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ChevronDown, Clapperboard, Download, GripVertical, ImagePlus, MoreHorizontal, Pin, Plus, Trash2, UserRound } from "lucide-react";
+import { ArrowLeft, ChevronDown, Clapperboard, Download, GripVertical, ImagePlus, MoreHorizontal, Pencil, Pin, Plus, Trash2, UserRound } from "lucide-react";
 import { AnimatePresence, motion, Reorder, useDragControls } from "motion/react";
 import { useRouter } from "next/navigation";
 import * as React from "react";
@@ -18,10 +18,12 @@ import { Segmented } from "@/components/ui/controls";
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Popover, PopoverContent, PopoverTrigger } from "@/components/ui/menu";
 import { Avatar, TimeAgo } from "@/components/ui/misc";
 import { downloadZip } from "@/lib/client/assets";
-import { nextCutCodes } from "@/lib/cuts";
+import { isCodeLike } from "@/lib/cuts";
 import type { CutBoard, CutDTO, CutTake } from "@/lib/services/cuts";
 import { CUT_STATUS_LABEL, type CutStatus, type Flag } from "@/lib/types";
 import { cn, fetchJson } from "@/lib/utils";
+
+import { CutName, NameInput, NewCutForm, refreshAfterRename, renameCut } from "./cut-name";
 
 const STATUS_ORDER: CutStatus[] = ["todo", "wip", "review", "done"];
 const STATUS_DOT: Record<CutStatus, string> = {
@@ -72,13 +74,15 @@ export function CutBoardView({
   );
   const done = cuts.filter((c) => c.status === "done").length;
 
-  async function add(count: number, code?: string) {
+  async function add(input: { code?: string; title?: string; count?: number }) {
     try {
-      const r = await fetchJson<{ items: { code: string }[] }>(`/api/projects/${projectId}/cuts`, { method: "POST", body: JSON.stringify({ count, code }) });
-      toast.success(r.items.length === 1 ? `${r.items[0].code}를 만들었어요.` : `${r.items[0].code} – ${r.items.at(-1)!.code} (${r.items.length}개)`);
+      const r = await fetchJson<{ items: { code: string }[] }>(`/api/projects/${projectId}/cuts`, { method: "POST", body: JSON.stringify(input) });
+      toast.success(r.items.length === 1 ? `"${r.items[0].code}" 컷을 만들었어요.` : `${r.items[0].code} – ${r.items.at(-1)!.code} (${r.items.length}개)`);
       refresh();
+      return true;
     } catch (e) {
       toast.error((e as Error).message);
+      return false;
     }
   }
 
@@ -152,17 +156,12 @@ export function CutBoardView({
               <div>
                 <p className="text-[15px] font-semibold">이 프로젝트는 아직 컷을 나누지 않았어요</p>
                 <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-fg-3">
-                  컷 없이 프로젝트에 바로 쌓아도 돼요. 컷을 나누면 클립마다 테이크 번호가 붙고, 컷별로 OK·NG를 모아 보고, 받을 때 폴더와 파일 이름에 컷·테이크·판정이 들어가요.
+                  컷 없이 프로젝트에 바로 쌓아도 돼요. 컷은 작업을 나누는 작은 단위라 시퀀스·씬 무엇이든 되고, 이름도 자유롭게 지어요. 나누면 클립마다 테이크 번호가 붙고, 컷별로 OK·NG를 모아 보고, 받을 때 폴더와 파일 이름에 컷 이름·테이크·판정이 들어가요.
                 </p>
               </div>
               {canEdit && (
                 <div className="flex items-center gap-2">
-                  <Button variant="secondary" onClick={() => add(1)}>
-                    <Plus /> C001 만들기
-                  </Button>
-                  <Button variant="primary" onClick={() => add(10)}>
-                    C001–C010
-                  </Button>
+                  <AddCuts existing={[]} onAdd={add} label="첫 컷 만들기" />
                 </div>
               )}
             </div>
@@ -229,7 +228,9 @@ function Stat({ label, value, sub, tone }: { label: string; value: number; sub?:
 
 function CutRow({ cut, index, canEdit, onOpen, onChanged, onDragEnd }: { cut: CutDTO; index: number; canEdit: boolean; onOpen: () => void; onChanged: () => void; onDragEnd: () => void }) {
   const controls = useDragControls();
+  const qc = useQueryClient();
   const live = cut.active.length > 0;
+  const [editing, setEditing] = React.useState(false);
   return (
     <Reorder.Item
       value={cut.id}
@@ -241,7 +242,7 @@ function CutRow({ cut, index, canEdit, onOpen, onChanged, onDragEnd }: { cut: Cu
       transition={{ duration: 0.35, delay: Math.min(index, 12) * 0.03, ease: [0.2, 0.8, 0.2, 1] }}
       whileDrag={{ scale: 1.01, boxShadow: "0 24px 60px -24px rgba(0,0,0,0.6)", backgroundColor: "rgb(14 19 24)" }}
       className={cn(
-        "group relative grid grid-cols-[76px_1fr] items-center gap-4 border-b border-line px-3 py-3 transition-colors hover:bg-white/[0.02] md:grid-cols-[76px_128px_minmax(0,1fr)_auto]",
+        "group relative grid grid-cols-[14px_minmax(0,1fr)_auto] items-center gap-3 border-b border-line py-3 pl-1 pr-3 transition-colors hover:bg-white/[0.02] md:grid-cols-[14px_128px_minmax(0,1fr)_auto] md:gap-4",
         live && "bg-accent/[0.03]",
       )}
     >
@@ -252,22 +253,19 @@ function CutRow({ cut, index, canEdit, onOpen, onChanged, onDragEnd }: { cut: Cu
           live ? "scale-y-100" : "scale-y-0 group-hover:scale-y-100",
         )}
       />
-      {/* 번호 */}
-      <div className="flex items-center gap-1.5">
-        {canEdit && (
-          <button
-            type="button"
-            onPointerDown={(e) => controls.start(e)}
-            className="-ml-2 cursor-grab touch-none rounded p-0.5 text-fg-4 opacity-0 transition group-hover:opacity-100 active:cursor-grabbing"
-            aria-label="순서 바꾸기"
-          >
-            <GripVertical className="size-3.5" />
-          </button>
-        )}
-        <button type="button" onClick={onOpen} className="text-left font-mono text-[15px] tracking-[0.03em] transition hover:text-accent">
-          {cut.code}
+      {/* 순서 */}
+      {canEdit ? (
+        <button
+          type="button"
+          onPointerDown={(e) => controls.start(e)}
+          className="cursor-grab touch-none rounded p-0.5 text-fg-4 opacity-0 transition group-hover:opacity-100 active:cursor-grabbing"
+          aria-label="순서 바꾸기"
+        >
+          <GripVertical className="size-3.5" />
         </button>
-      </div>
+      ) : (
+        <span />
+      )}
 
       {/* 대표 */}
       <button type="button" onClick={onOpen} className="relative hidden aspect-video overflow-hidden rounded-lg bg-panel-3 ring-1 ring-white/[0.06] md:block" aria-label={`${cut.code} 열기`}>
@@ -279,12 +277,55 @@ function CutRow({ cut, index, canEdit, onOpen, onChanged, onDragEnd }: { cut: Cu
         {cut.cover?.flag && <VerdictBadge flag={cut.cover.flag} className="absolute bottom-1 left-1" />}
       </button>
 
-      {/* 제목·상태·담당 */}
-      <div className="col-span-2 flex min-w-0 flex-col gap-2 md:col-span-1">
+      {/* 이름·설명·상태·담당 */}
+      <div className="flex min-w-0 flex-col gap-1.5">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-          <button type="button" onClick={onOpen} className="min-w-0 truncate text-left text-[14px] font-medium hover:underline">
-            {cut.title || <span className="text-fg-4">제목 없음</span>}
-          </button>
+          {editing ? (
+            <NameInput
+              initial={cut.code}
+              className="h-8 w-[min(320px,100%)] text-[15px]"
+              onCancel={() => setEditing(false)}
+              onSubmit={async (name) => {
+                try {
+                  await renameCut(cut.id, name);
+                  toast.success(cut.counts.takes ? `이름을 바꿨어요: ${name} · 파일 ${cut.counts.takes}개 이름도 함께` : `이름을 바꿨어요: ${name}`);
+                  setEditing(false);
+                  refreshAfterRename(qc);
+                  onChanged();
+                  return true;
+                } catch (e) {
+                  toast.error((e as Error).message);
+                  return false;
+                }
+              }}
+            />
+          ) : (
+            <span className="flex min-w-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={onOpen}
+                onDoubleClick={(e) => {
+                  if (!canEdit) return;
+                  e.preventDefault();
+                  setEditing(true);
+                }}
+                className="min-w-0 max-w-full text-left text-[15px] text-fg transition hover:text-accent"
+              >
+                <CutName name={cut.code} className="block" />
+              </button>
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => setEditing(true)}
+                  className="shrink-0 rounded-md p-1 text-fg-4 opacity-0 transition hover:bg-white/[0.06] hover:text-fg group-hover:opacity-100"
+                  aria-label="이름 바꾸기"
+                  title="이름 바꾸기 (더블클릭해도 돼요)"
+                >
+                  <Pencil className="size-3" />
+                </button>
+              )}
+            </span>
+          )}
           <StatusPicker cut={cut} canEdit={canEdit} onChanged={onChanged} />
           <AssigneePicker cut={cut} canEdit={canEdit} onChanged={onChanged} />
           <AnimatePresence>
@@ -299,21 +340,22 @@ function CutRow({ cut, index, canEdit, onOpen, onChanged, onDragEnd }: { cut: Cu
             )}
           </AnimatePresence>
         </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] text-fg-4">
-          <span>T{cut.counts.takes}</span>
-          {cut.counts.ok > 0 && <span className="text-success">OK {cut.counts.ok}</span>}
-          {cut.counts.keep > 0 && <span className="text-warning">KEEP {cut.counts.keep}</span>}
-          {cut.counts.ng > 0 && <span className="text-danger">NG {cut.counts.ng}</span>}
-          <span className="font-sans">
-            <TimeAgo date={cut.lastActivityAt} />
-          </span>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-fg-4">
+          {cut.title && <span className="min-w-0 max-w-full truncate text-[12.5px] text-fg-3">{cut.title}</span>}
+          <span className="font-mono">T{cut.counts.takes}</span>
+          {cut.counts.ok > 0 && <span className="font-mono text-success">OK {cut.counts.ok}</span>}
+          {cut.counts.keep > 0 && <span className="font-mono text-warning">KEEP {cut.counts.keep}</span>}
+          {cut.counts.ng > 0 && <span className="font-mono text-danger">NG {cut.counts.ng}</span>}
+          <TimeAgo date={cut.lastActivityAt} />
         </div>
       </div>
 
       {/* 최근 테이크 */}
-      <div className="col-span-2 flex items-center justify-between gap-3 md:col-span-1 md:justify-end">
-        <TakeStrip takes={cut.recent} onClick={onOpen} />
-        <CutMenu cut={cut} canEdit={canEdit} onOpen={onOpen} onChanged={onChanged} />
+      <div className="flex items-center justify-end gap-3">
+        <span className="hidden lg:block">
+          <TakeStrip takes={cut.recent} onClick={onOpen} />
+        </span>
+        <CutMenu cut={cut} canEdit={canEdit} onOpen={onOpen} onChanged={onChanged} onRename={() => setEditing(true)} />
       </div>
     </Reorder.Item>
   );
@@ -438,7 +480,7 @@ function AssigneePicker({ cut, canEdit, onChanged }: { cut: CutDTO; canEdit: boo
   );
 }
 
-function CutMenu({ cut, canEdit, onOpen, onChanged }: { cut: CutDTO; canEdit: boolean; onOpen: () => void; onChanged: () => void }) {
+function CutMenu({ cut, canEdit, onOpen, onChanged, onRename }: { cut: CutDTO; canEdit: boolean; onOpen: () => void; onChanged: () => void; onRename: () => void }) {
   const router = useRouter();
   return (
     <Menu>
@@ -447,7 +489,7 @@ function CutMenu({ cut, canEdit, onOpen, onChanged }: { cut: CutDTO; canEdit: bo
           <MoreHorizontal />
         </Button>
       </MenuTrigger>
-      <MenuContent align="end">
+      <MenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
         <MenuItem onSelect={onOpen}>
           <Clapperboard /> 테이크 보기
         </MenuItem>
@@ -460,20 +502,13 @@ function CutMenu({ cut, canEdit, onOpen, onChanged }: { cut: CutDTO; canEdit: bo
               <Clapperboard /> 이 컷에서 영상
             </MenuItem>
             <MenuSeparator />
-            <MenuItem
-              onSelect={async () => {
-                const code = window.prompt("컷 번호", cut.code);
-                if (!code || code === cut.code) return;
-                await patchCut(cut.id, { code }).catch((e) => toast.error((e as Error).message));
-                onChanged();
-              }}
-            >
-              번호 바꾸기
+            <MenuItem onSelect={onRename}>
+              <Pencil /> 이름 바꾸기
             </MenuItem>
             <MenuItem
               danger
               onSelect={async () => {
-                if (!window.confirm(`${cut.code}를 지울까요? 클립은 지워지지 않고 "컷 없이 쌓인 클립"으로 돌아가요.`)) return;
+                if (!window.confirm(`"${cut.code}" 컷을 지울까요? 클립은 지워지지 않고 "컷 없이 쌓인 클립"으로 돌아가요.`)) return;
                 await fetchJson(`/api/cuts/${cut.id}`, { method: "DELETE" }).catch((e) => toast.error((e as Error).message));
                 onChanged();
               }}
@@ -489,42 +524,27 @@ function CutMenu({ cut, canEdit, onOpen, onChanged }: { cut: CutDTO; canEdit: bo
 
 /* ---------------------------------- 추가·내보내기 ---------------------------------- */
 
-function AddCuts({ existing, onAdd }: { existing: string[]; onAdd: (count: number, code?: string) => Promise<void> }) {
-  const [count, setCount] = React.useState(5);
-  const [code, setCode] = React.useState("");
-  const preview = code.trim() ? [code.trim().toUpperCase(), ...nextCutCodes([...existing, code.trim().toUpperCase()], Math.max(0, count - 1))] : nextCutCodes(existing, count);
+function AddCuts({ existing, onAdd, label = "컷 추가" }: { existing: string[]; onAdd: (input: { code?: string; title?: string; count?: number }) => Promise<boolean>; label?: string }) {
+  const [open, setOpen] = React.useState(false);
   return (
-    <div className="flex items-center">
-      <Button variant="primary" className="rounded-r-none" onClick={() => onAdd(1)}>
-        <Plus /> {nextCutCodes(existing, 1)[0]}
-      </Button>
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button variant="primary" className="rounded-l-none border-l border-black/15 px-2" aria-label="여러 개 만들기">
-            <ChevronDown />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent align="end" className="w-[280px] p-4">
-          <p className="text-[13px] font-semibold">컷 여러 개 만들기</p>
-          <div className="mt-3 grid grid-cols-[1fr_84px] gap-2">
-            <label className="flex flex-col gap-1 text-[11.5px] text-fg-3">
-              시작 번호 (비우면 이어서)
-              <input value={code} onChange={(e) => setCode(e.target.value)} placeholder={nextCutCodes(existing, 1)[0]} className="h-9 rounded-lg border border-line-2 bg-panel-2 px-2.5 font-mono text-[13px] outline-none focus:border-fg-3" />
-            </label>
-            <label className="flex flex-col gap-1 text-[11.5px] text-fg-3">
-              개수
-              <input type="number" min={1} max={200} value={count} onChange={(e) => setCount(Math.max(1, Math.min(200, Number(e.target.value) || 1)))} className="h-9 rounded-lg border border-line-2 bg-panel-2 px-2.5 font-mono text-[13px] outline-none focus:border-fg-3" />
-            </label>
-          </div>
-          <p className="mt-2 font-mono text-[11px] text-fg-3">
-            {preview[0]} {preview.length > 1 && `– ${preview.at(-1)}`}
-          </p>
-          <Button variant="primary" className="mt-3 w-full" onClick={() => onAdd(count, code.trim() || undefined).then(() => setCode(""))}>
-            {count}개 만들기
-          </Button>
-        </PopoverContent>
-      </Popover>
-    </div>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="primary">
+          <Plus /> {label}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-[300px] p-4">
+        <p className="mb-3 text-[13px] font-semibold">새 컷</p>
+        <NewCutForm
+          existing={existing}
+          onCreate={async (input) => {
+            const ok = await onAdd(input);
+            if (ok) setOpen(false);
+            return ok;
+          }}
+        />
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -599,6 +619,8 @@ function CutDetail({
   onChanged: () => void;
 }) {
   const router = useRouter();
+  const qc = useQueryClient();
+  const [editingName, setEditingName] = React.useState(false);
   const [title, setTitle] = React.useState(cut?.title ?? "");
   const [note, setNote] = React.useState(cut?.note ?? "");
   const saveTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -620,9 +642,48 @@ function CutDetail({
             <ArrowLeft className="size-3.5" /> 컷 목록
           </button>
           <div className="flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-2">
-            <motion.span initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="font-mono text-[34px] font-semibold leading-none tracking-[0.02em]">
-              {cut?.code ?? "—"}
-            </motion.span>
+            {cut && editingName ? (
+              <NameInput
+                initial={cut.code}
+                className="h-12 w-[min(420px,100%)] text-[28px]"
+                onCancel={() => setEditingName(false)}
+                onSubmit={async (name) => {
+                  try {
+                    await renameCut(cut.id, name);
+                    toast.success(cut.counts.takes ? `이름을 바꿨어요: ${name} · 파일 ${cut.counts.takes}개 이름도 함께` : `이름을 바꿨어요: ${name}`);
+                    setEditingName(false);
+                    refreshAfterRename(qc);
+                    onChanged();
+                    return true;
+                  } catch (e) {
+                    toast.error((e as Error).message);
+                    return false;
+                  }
+                }}
+              />
+            ) : (
+              <motion.span initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="group/name flex min-w-0 items-center gap-2">
+                <button
+                  type="button"
+                  disabled={!cut || !canEdit}
+                  onClick={() => setEditingName(true)}
+                  className={cn("min-w-0 text-left leading-none disabled:cursor-default", cut && isCodeLike(cut.code) ? "text-[34px] font-semibold" : "text-[30px]")}
+                  title={canEdit ? "눌러서 이름 바꾸기" : undefined}
+                >
+                  {cut ? <CutName name={cut.code} className={cn("block", isCodeLike(cut.code) ? "font-semibold" : "font-semibold tracking-[-0.01em]")} /> : "—"}
+                </button>
+                {cut && canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingName(true)}
+                    className="shrink-0 rounded-md p-1.5 text-fg-4 opacity-60 transition hover:bg-white/[0.06] hover:text-fg group-hover/name:opacity-100"
+                    aria-label="이름 바꾸기"
+                  >
+                    <Pencil className="size-4" />
+                  </button>
+                )}
+              </motion.span>
+            )}
             {cut ? (
               canEdit ? (
                 <input
@@ -631,7 +692,7 @@ function CutDetail({
                     setTitle(e.target.value);
                     save({ title: e.target.value });
                   }}
-                  placeholder="컷 제목 (예: 오프닝 드론샷)"
+                  placeholder="설명 (예: 해 질 녘 옥상 와이드)"
                   className="min-w-[240px] bg-transparent text-[20px] font-medium outline-none placeholder:text-fg-4"
                 />
               ) : (
@@ -645,8 +706,8 @@ function CutDetail({
             <div className="flex flex-wrap items-center gap-3">
               <StatusPicker cut={cut} canEdit={canEdit} onChanged={onChanged} />
               <AssigneePicker cut={cut} canEdit={canEdit} onChanged={onChanged} />
-              <span className="font-mono text-[11px] text-fg-4">
-                {projectName} / {cut.code} · T{cut.counts.takes} · OK {cut.counts.ok} · KEEP {cut.counts.keep} · NG {cut.counts.ng}
+              <span className="text-[11px] text-fg-4">
+                {projectName} / {cut.code} · <span className="font-mono">T{cut.counts.takes} · OK {cut.counts.ok} · KEEP {cut.counts.keep} · NG {cut.counts.ng}</span>
               </span>
             </div>
           )}

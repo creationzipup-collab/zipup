@@ -269,7 +269,7 @@ export const cuts = pgTable(
     projectId: uuid()
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
-    /** 컷 번호 (C001, S02_C05 …) — 프로젝트 안에서 고유 */
+    /** 컷 이름 (C001, S02_C05, 오프닝 시퀀스 …) — 자유롭게, 프로젝트 안에서 고유 */
     code: text().notNull(),
     title: text(),
     /** 연출 메모 */

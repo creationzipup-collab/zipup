@@ -42,6 +42,7 @@ import { MODELS } from "@/lib/models/registry";
 import { SEARCH_HELP } from "@/lib/search/query";
 import type { AssetListItem } from "@/lib/services/library";
 import { COLOR_LABELS, FLAG_LABEL, type ColorLabel, type Flag } from "@/lib/types";
+import { isCodeLike } from "@/lib/cuts";
 import { cn, fetchJson } from "@/lib/utils";
 
 type Scope = "all" | "mine" | "fav" | "trash";
@@ -582,7 +583,7 @@ export function AssetBrowser({
                       <MenuLabel>선택한 클립을 컷으로 (새 테이크 번호)</MenuLabel>
                       {cutOptions.map((c) => (
                         <MenuItem key={c.id} onSelect={() => void moveToCut(c.id)}>
-                          <span className="font-mono text-[12px]">{c.code}</span>
+                          <span className={cn("max-w-[180px] truncate", isCodeLike(c.code) ? "font-mono text-[12px]" : "font-medium")}>{c.code}</span>
                           {c.title && <span className="truncate text-fg-3">{c.title}</span>}
                         </MenuItem>
                       ))}
