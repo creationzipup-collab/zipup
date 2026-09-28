@@ -589,7 +589,7 @@ let lastTick = 0;
 let ticking = false;
 
 /**
- * 대기열 제출 + 상태 동기화 + 복구. Vercel Cron(매분), 웹훅, 클라이언트 폴링에서 호출됩니다.
+ * 대기열 제출 + 상태 동기화 + 복구. Vercel Cron, 웹훅, 클라이언트 폴링에서 호출됩니다.
  * 같은 인스턴스에서 짧은 시간 안에 중복 실행되지 않도록 제한합니다.
  */
 export async function tick(opts: { budgetMs?: number; maxSync?: number; force?: boolean } = {}) {

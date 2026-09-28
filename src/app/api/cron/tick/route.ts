@@ -6,7 +6,7 @@ import { tick } from "@/lib/services/generation";
 export const maxDuration = 300;
 
 /**
- * Vercel Cron (vercel.json) — 매분 실행.
+ * Vercel Cron (vercel.json) — 기본은 하루 1번(Pro 플랜이면 매분으로 바꿀 수 있어요).
  * 대기열 제출, 놓친 웹훅 복구, 결과 저장 재시도를 담당합니다.
  */
 export async function GET(req: NextRequest) {
