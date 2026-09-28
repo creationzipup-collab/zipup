@@ -7,7 +7,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
       <div className="flex flex-col gap-4">
-        <PageTitle label="Control room" title="관리자" accent="Behind the set." />
+        <PageTitle label="Admin" title="관리자" />
         <AdminNav />
       </div>
       {children}

@@ -83,7 +83,6 @@ export function AssetBrowser({
   canEdit = true,
   title,
   label,
-  accent,
   subtitle,
   actions,
   hideScope,
@@ -94,9 +93,8 @@ export function AssetBrowser({
   cutId?: string;
   canEdit?: boolean;
   title?: React.ReactNode;
-  /** 제목 위 모노 라벨·옆 세리프 한 줄 (페이지 제목으로 쓸 때) */
+  /** 제목 위 모노 라벨 (페이지 제목으로 쓸 때) */
   label?: string;
-  accent?: string;
   subtitle?: React.ReactNode;
   actions?: React.ReactNode;
   hideScope?: boolean;
@@ -338,7 +336,7 @@ export function AssetBrowser({
   return (
     <div className="flex flex-col gap-4">
       {title && label ? (
-        <PageTitle label={label} title={title} accent={accent} subtitle={subtitle} actions={actions} />
+        <PageTitle label={label} title={title} subtitle={subtitle} actions={actions} />
       ) : (
         (title || actions) && (
           <div className="flex flex-wrap items-end justify-between gap-3">

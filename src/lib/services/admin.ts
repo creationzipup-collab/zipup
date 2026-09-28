@@ -195,7 +195,7 @@ export async function updateUserAdmin(
     const [t] = updated.teamId ? await db.select({ name: teams.name }).from(teams).where(eq(teams.id, updated.teamId)) : [];
     await notify(userId, {
       type: "account_approved",
-      title: "가입이 승인됐어요 🎉",
+      title: "가입이 승인됐어요",
       body: `${t?.name ?? "팀 미지정"} · ${patch.role ?? updated.role} 권한으로 이용할 수 있어요.`,
       href: "/",
     });

@@ -20,10 +20,12 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutGroup, motion } from "motion/react";
+import { LayoutGroup } from "motion/react";
 import * as React from "react";
 
 import { BrandLockup } from "@/components/brand/logo";
+import { RollingNumber } from "@/components/brand/motion";
+import { LiquidRail } from "@/components/shell/liquid-rail";
 import { useTheme } from "@/components/providers";
 import { CommandPalette } from "@/components/shell/command-palette";
 import { NotificationsButton } from "@/components/shell/notifications";
@@ -200,6 +202,7 @@ function SidebarInner({
 }) {
   const router = useRouter();
   const isActive = (href: string, exact?: boolean) => (exact ? pathname === href : pathname === href || pathname.startsWith(href + "/"));
+  const activeKey = NAV.find((i) => isActive(i.href, i.exact))?.href ?? (isActive("/admin") ? "/admin" : null);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -234,7 +237,8 @@ function SidebarInner({
         </Menu>
       </div>
 
-      <nav className="flex flex-col gap-0.5 px-3 py-2">
+      <nav className="relative mx-3 flex flex-col gap-0.5 py-2 pl-2.5">
+        <LiquidRail activeKey={activeKey} />
         {NAV.map((item) => {
           const active = isActive(item.href, item.exact);
           const Icon = item.icon;
@@ -242,12 +246,12 @@ function SidebarInner({
             <Link
               key={item.href}
               href={item.href}
+              data-rail-key={item.href}
               className={cn(
-                "group relative flex h-9 items-center gap-3 rounded-[10px] px-3 text-[13.5px] transition-colors",
-                active ? "bg-panel-2 font-medium text-fg" : "text-fg-3 hover:bg-panel/80 hover:text-fg",
+                "group relative flex h-9 items-center gap-3 rounded-[10px] px-3 text-[13.5px] transition-colors duration-200",
+                active ? "font-medium text-fg" : "text-fg-3 hover:text-fg",
               )}
             >
-              {active && <motion.span layoutId="nav-indicator" transition={{ type: "spring", stiffness: 520, damping: 40 }} className="absolute -left-3 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-accent" />}
               <Icon className={cn("size-[17px]", active ? "text-fg" : "text-fg-4 group-hover:text-fg-2")} strokeWidth={1.8} />
               {item.label}
             </Link>
@@ -256,12 +260,12 @@ function SidebarInner({
         {user.role === "admin" && (
           <Link
             href="/admin"
+            data-rail-key="/admin"
             className={cn(
-              "group relative mt-1 flex h-9 items-center gap-3 rounded-[10px] px-3 text-[13.5px] transition-colors",
-              isActive("/admin") ? "bg-panel-2 font-medium text-fg" : "text-fg-3 hover:bg-panel/80 hover:text-fg",
+              "group relative mt-1 flex h-9 items-center gap-3 rounded-[10px] px-3 text-[13.5px] transition-colors duration-200",
+              isActive("/admin") ? "font-medium text-fg" : "text-fg-3 hover:text-fg",
             )}
           >
-            {isActive("/admin") && <motion.span layoutId="nav-indicator" transition={{ type: "spring", stiffness: 520, damping: 40 }} className="absolute -left-3 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-accent" />}
             <ShieldCheck className="size-[17px] text-fg-4 group-hover:text-fg-2" strokeWidth={1.8} />
             관리자
             {!!user.pendingApprovals && (
@@ -326,7 +330,7 @@ function BudgetCard({ budget }: { budget: BudgetStatus }) {
         <span className="font-mono text-[11px] text-fg-3">{main ? `${Math.round(pct)}%` : "무제한"}</span>
       </div>
       <div className="mt-1.5 flex items-baseline gap-1.5">
-        <span className="font-mono text-[17px] font-semibold tracking-tight">{usd(budget.user.spent)}</span>
+        <RollingNumber value={budget.user.spent} format={usd} className="font-mono text-[17px] font-semibold tracking-tight" />
         <span className="text-[11px] text-fg-4">내 사용</span>
       </div>
       {main && (

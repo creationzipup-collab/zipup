@@ -10,7 +10,7 @@ export default function Loading() {
           <span className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-line-2" />
           <span className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-line-2" />
           {[3, 2, 1].map((n, i) => (
-            <span key={n} className="film-leader-num absolute inset-0 flex items-center justify-center font-serif text-[46px] italic text-fg" style={{ animationDelay: `${i}s` }}>
+            <span key={n} className="film-leader-num absolute inset-0 flex items-center justify-center font-display text-[44px] font-light text-fg" style={{ animationDelay: `${i}s` }}>
               {n}
             </span>
           ))}

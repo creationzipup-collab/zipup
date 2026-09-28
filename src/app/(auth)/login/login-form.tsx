@@ -41,8 +41,8 @@ export function LoginForm({ next, googleEnabled }: { next?: string; googleEnable
             <span className="h-px w-5 bg-accent" />
             Sign in
           </p>
-          <h2 className="mt-2 text-[28px] font-semibold tracking-[-0.03em]">다시 오셨네요</h2>
-          <p className="mt-1.5 text-sm text-fg-3">회사 계정으로 로그인하세요.</p>
+          <h2 className="mt-2 text-[28px] font-semibold tracking-[-0.03em]">로그인</h2>
+          <p className="mt-1.5 text-sm text-fg-3">크리에이션 집업 구성원 계정</p>
         </div>
       </div>
 

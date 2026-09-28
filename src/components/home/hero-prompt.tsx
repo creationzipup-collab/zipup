@@ -82,7 +82,7 @@ export function HeroPrompt({ recent }: { recent: { id: string; title: string; pr
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2 px-3 pb-3">
-            <span className="hidden px-2 text-[11.5px] text-fg-4 sm:inline">한·영·중 어느 언어로 써도 돼요 — 스튜디오에서 한국어 대조와 표현 추천이 이어져요</span>
+            <span className="hidden px-2 font-mono text-[10.5px] uppercase tracking-[0.16em] text-fg-4 sm:inline">KO · EN · ZH</span>
             <div className="ml-auto flex items-center gap-2">
               <button
                 type="button"

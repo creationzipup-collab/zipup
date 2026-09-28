@@ -108,8 +108,6 @@
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
   /* 큰 숫자·영문: Geist (한글은 Pretendard로 이어짐) */
   --font-display: var(--font-geist-sans), "Pretendard Variable", Pretendard, system-ui, sans-serif;
-  /* 영문 강조용 세리프 이탤릭 (한글은 Pretendard로 이어짐) */
-  --font-serif: var(--font-serif-latin), "Pretendard Variable", Pretendard, Georgia, serif;
 
   --radius-xs: 6px;
   --radius-sm: 8px;
@@ -125,8 +123,6 @@
   --animate-spin-slow: spin 6s linear infinite;
   --animate-fade-up: fade-up 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   --animate-pulse-dot: pulse-dot 1.6s ease-in-out infinite;
-  --animate-drift: drift 18s ease-in-out infinite alternate;
-  --animate-drift-slow: drift 26s ease-in-out infinite alternate-reverse;
 }
 
 @property --prompt-angle {
@@ -179,34 +175,6 @@
   }
 }
 
-/* 빛샘(라이트 릭)이 천천히 떠다님 */
-@keyframes drift {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(6%, -4%, 0) scale(1.08);
-  }
-  100% {
-    transform: translate3d(-5%, 5%, 0) scale(0.96);
-  }
-}
-
-@keyframes marquee {
-  to {
-    transform: translate3d(-100%, 0, 0);
-  }
-}
-
-@keyframes grid-roll {
-  from {
-    transform: rotateX(64deg) translate3d(0, 0, 0);
-  }
-  to {
-    transform: rotateX(64deg) translate3d(0, 64px, 0);
-  }
-}
-
 /* 페이지가 바뀔 때 위쪽을 스치는 셔터 라인 */
 @keyframes shutter-sweep {
   0% {
@@ -255,27 +223,6 @@
   }
   100% {
     opacity: 0;
-  }
-}
-
-@keyframes grain-shift {
-  0% {
-    transform: translate(0, 0);
-  }
-  20% {
-    transform: translate(-3%, 2%);
-  }
-  40% {
-    transform: translate(2%, -3%);
-  }
-  60% {
-    transform: translate(-2%, -1%);
-  }
-  80% {
-    transform: translate(3%, 3%);
-  }
-  100% {
-    transform: translate(0, 0);
   }
 }
 
@@ -459,17 +406,6 @@
     background-position: 0 0, 0 8px, 8px -8px, -8px 0;
   }
 
-  /* 움직이는 필름 그레인 (장식 패널 전용 — 결과물 위에는 절대 올리지 않음) */
-  .grain-live {
-    position: absolute;
-    inset: -20%;
-    pointer-events: none;
-    opacity: 0.07;
-    mix-blend-mode: overlay;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-    animation: grain-shift 0.9s steps(5) infinite;
-  }
-
   /* 커서를 따라 번지는 빛 + 테두리 하이라이트 */
   .spotlight {
     position: relative;
@@ -501,48 +437,6 @@
   .spotlight:hover::before,
   .spotlight:hover::after {
     opacity: 1;
-  }
-
-  /* 무한 띠 */
-  .marquee-track {
-    animation: marquee var(--marquee-duration, 60s) linear infinite;
-    will-change: transform;
-  }
-  .marquee:hover .marquee-track {
-    animation-play-state: paused;
-  }
-
-  /* 필름 스트립 구멍 (색은 --sprocket, 양 끝은 흐리게) */
-  .sprockets {
-    height: 14px;
-    background: var(--sprocket, rgb(255 255 255 / 0.16));
-    -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='14'><rect x='6' y='3' width='12' height='8' rx='2'/></svg>"), linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent);
-    -webkit-mask-repeat: repeat-x, no-repeat;
-    -webkit-mask-composite: source-in;
-    mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='14'><rect x='6' y='3' width='12' height='8' rx='2'/></svg>"), linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent);
-    mask-repeat: repeat-x, no-repeat;
-    mask-composite: intersect;
-  }
-
-  /* 3D 뷰포트 바닥 그리드 */
-  .viewport-grid {
-    perspective: 520px;
-    -webkit-mask-image: linear-gradient(to top, #000 10%, transparent 92%);
-    mask-image: linear-gradient(to top, #000 10%, transparent 92%);
-  }
-  .viewport-grid-plane {
-    position: absolute;
-    left: -60%;
-    right: -60%;
-    top: -120%;
-    bottom: -40%;
-    transform-origin: 50% 100%;
-    background-image:
-      linear-gradient(to right, var(--vg-line, rgb(255 255 255 / 0.09)) 1px, transparent 1px),
-      linear-gradient(to bottom, var(--vg-line, rgb(255 255 255 / 0.09)) 1px, transparent 1px);
-    background-size: 64px 64px;
-    animation: grid-roll 5s linear infinite;
-    will-change: transform;
   }
 
   /* 페이지 전환 셔터 라인 */
@@ -586,10 +480,7 @@
     .film-leader-num {
       display: none;
     }
-    .grain-live,
     .slate-clapper,
-    .marquee-track,
-    .viewport-grid-plane,
     .shutter-line {
       animation: none;
     }
@@ -710,10 +601,3 @@
   }
 }
 
-/* 동작 줄이기: 떠다니는 빛샘도 멈춤 (유틸리티보다 우선하도록 레이어 밖에 둠) */
-@media (prefers-reduced-motion: reduce) {
-  .animate-drift,
-  .animate-drift-slow {
-    animation: none;
-  }
-}

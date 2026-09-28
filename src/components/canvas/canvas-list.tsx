@@ -51,9 +51,8 @@ export function CanvasList({ projects, openNew, canCreate }: { projects: Editabl
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
       <PageTitle
-        label="Pipelines"
+        label="Canvas"
         title="노드 캔버스"
-        accent="Wire the scene."
         subtitle="프롬프트 → 이미지 → 영상 과정을 노드로 연결해 반복 가능한 워크플로를 만들어요."
         actions={
           canCreate && (
@@ -108,7 +107,7 @@ export function CanvasList({ projects, openNew, canCreate }: { projects: Editabl
               <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
             </Field>
             <Field label="프로젝트" hint="캔버스에서 만든 결과물은 이 프로젝트에 저장돼요.">
-              <Select value={projectId} onValueChange={setProjectId} options={projects.map((p) => ({ value: p.id, label: p.isPersonal ? `🔒 ${p.name}` : p.name }))} />
+              <Select value={projectId} onValueChange={setProjectId} options={projects.map((p) => ({ value: p.id, label: p.isPersonal ? `${p.name} (개인)` : p.name }))} />
             </Field>
           </DialogBody>
           <DialogFooter>

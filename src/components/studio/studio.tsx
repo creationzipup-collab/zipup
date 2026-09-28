@@ -608,7 +608,7 @@ export function Studio({
               <div className="flex items-center gap-2">
                 <span className="eyebrow flex items-center gap-2">
                   <span className="size-1.5 rounded-full" style={{ background: kind === "image" ? "#ff5b24" : "#5b4bff" }} />
-                  {kind === "image" ? "A Cam · Image Studio" : "B Cam · Video Studio"}
+                  {kind === "image" ? "Image Studio" : "Video Studio"}
                 </span>
                 <ProviderTag status={st} />
                 <div className="ml-auto flex items-center gap-1">
@@ -700,7 +700,7 @@ export function Studio({
                   <Select
                     value={projectId}
                     onValueChange={setProjectId}
-                    options={projects.map((p) => ({ value: p.id, label: p.isPersonal ? `🔒 ${p.name}` : p.name }))}
+                    options={projects.map((p) => ({ value: p.id, label: p.isPersonal ? `${p.name} (개인)` : p.name }))}
                     className="w-full"
                   />
                 </div>

@@ -51,9 +51,8 @@ export function ProjectsView({
   return (
     <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
       <PageTitle
-        label="Productions"
+        label="Projects"
         title={archived ? "보관된 프로젝트" : "프로젝트"}
-        accent={archived ? "That's a wrap." : "In production."}
         subtitle="생성물·컬렉션·노드 캔버스를 프로젝트 단위로 묶어 팀과 공유해요."
         actions={
         <div className="flex items-center gap-2">
@@ -95,7 +94,7 @@ export function ProjectsView({
         <EmptyState
           icon={<FolderKanban />}
           title="프로젝트가 없어요"
-          description="새 프로젝트를 만들어 팀과 생성물을 공유해 보세요."
+          description="프로젝트로 생성물·컷·캔버스를 묶어 팀과 같이 써요."
           action={canCreate && !archived ? <Button variant="primary" onClick={() => setOpen(true)}><Plus /> 새 프로젝트</Button> : undefined}
         />
       ) : (

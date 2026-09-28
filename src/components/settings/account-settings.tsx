@@ -23,7 +23,7 @@ type Stats = { images: number; videos: number; uploads: number; favorites: numbe
 export function AccountSettings({ me, budget, stats, warnPercent }: { me: Me; budget: BudgetStatus; stats: Stats; warnPercent: number }) {
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 py-6 sm:px-8 sm:py-8">
-      <PageTitle label="Settings" title="설정" accent="Your setup." subtitle="내 프로필, 비밀번호, 화면, 이번 달 사용량을 관리해요." />
+      <PageTitle label="Settings" title="설정" subtitle="내 프로필, 비밀번호, 화면, 이번 달 사용량을 관리해요." />
       <UsageCard budget={budget} stats={stats} warnPercent={warnPercent} />
       <ProfileSection me={me} />
       <PasswordSection />

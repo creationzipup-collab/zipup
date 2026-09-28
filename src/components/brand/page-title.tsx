@@ -1,36 +1,27 @@
 import { cn } from "@/lib/utils";
 
 /**
- * 페이지 제목: 모노 라벨 + 한글 제목 + 영문 세리프 이탤릭 한 줄.
- * 촬영장 어휘(ARCHIVE·PRODUCTIONS·SCRIPTS…)로 사이트 전체의 말투를 맞춰요.
+ * 페이지 제목: 작은 모노 라벨 + 제목 + 한 줄 설명. 모든 페이지가 같은 모양으로 시작해요.
  */
 export function PageTitle({
   label,
   title,
-  accent,
   subtitle,
   actions,
   className,
 }: {
   label: string;
   title: React.ReactNode;
-  accent?: string;
   subtitle?: React.ReactNode;
   actions?: React.ReactNode;
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-wrap items-end justify-between gap-3", className)}>
+    <div className={cn("flex flex-wrap items-end justify-between gap-4 border-b border-line pb-5", className)}>
       <div className="min-w-0 animate-fade-up">
-        <p className="section-index flex items-center gap-2 uppercase">
-          <span className="h-px w-5 bg-accent" />
-          {label}
-        </p>
-        <h1 className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[26px] font-semibold leading-tight tracking-[-0.03em]">
-          {title}
-          {accent && <span className="font-serif text-[25px] font-normal italic tracking-[-0.01em] text-fg-3">{accent}</span>}
-        </h1>
-        {subtitle && <p className="mt-1.5 text-sm text-fg-3">{subtitle}</p>}
+        <p className="font-mono text-[10.5px] uppercase tracking-[0.22em] text-fg-4">{label}</p>
+        <h1 className="mt-2.5 text-[30px] font-semibold leading-none tracking-[-0.035em]">{title}</h1>
+        {subtitle && <p className="mt-3 max-w-2xl text-[13.5px] leading-relaxed text-fg-3">{subtitle}</p>}
       </div>
       {actions}
     </div>

@@ -82,7 +82,7 @@ export function PromptLibraryDialog({
         </div>
         <div className="flex max-h-[55vh] flex-col gap-1 overflow-y-auto p-3 scrollbar-thin">
           {isLoading && Array.from({ length: 4 }).map((_, i) => <div key={i} className="skeleton h-16 rounded-xl" />)}
-          {!isLoading && !data.length && <EmptyState icon={<BookText />} title="저장된 프롬프트가 없어요" description="스튜디오에서 🔖 버튼으로 자주 쓰는 프롬프트를 저장해 보세요." />}
+          {!isLoading && !data.length && <EmptyState icon={<BookText />} title="저장된 프롬프트가 없어요" description="스튜디오에서 ⌘S로 저장한 프롬프트와 팀이 공유한 프롬프트가 여기 모여요." />}
           {data.map((p) => {
             const Icon = VIS_ICON[p.visibility];
             return (

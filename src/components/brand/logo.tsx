@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
  * 원본 SVG/AI 파일이 있으면 public/brand/ 에 넣고 이 컴포넌트를 교체하세요.
  */
 
-const ZIPUP_PATHS = [
+export const ZIPUP_PATHS = [
   // Z
   "M0,0 H97 A40,40 0 0 1 137,40 V126 A10,10 0 0 0 147,136 H240 V152 H145 A40,40 0 0 1 105,112 V25 A10,10 0 0 0 95,15 H0 Z",
   // I
@@ -18,7 +18,7 @@ const ZIPUP_PATHS = [
   "M808,0 H992 A38,38 0 0 1 1030,38 V44 A38,38 0 0 1 992,82 H851 A10,10 0 0 0 841,92 V152 H808 V106 A40,40 0 0 1 848,66 H986 A12,12 0 0 0 998,54 V27 A12,12 0 0 0 986,15 H808 Z",
 ];
 
-const CREATION_PATHS = [
+export const CREATION_PATHS = [
   // C
   "M130,0 H22 A22,22 0 0 0 0,22 V66 A22,22 0 0 0 22,88 H130 V72 H24 A8,8 0 0 1 16,64 V24 A8,8 0 0 1 24,16 H130 Z",
   // R

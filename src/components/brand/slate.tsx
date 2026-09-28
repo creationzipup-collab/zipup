@@ -42,7 +42,7 @@ export function Slate({ director, take = 1, roll = "A001", className }: { direct
         {cells.map((c) => (
           <div key={c.label} className={cn("flex flex-col gap-1 bg-panel px-2.5 py-2 text-left", c.wide && "col-span-2")}>
             <span className="font-mono text-[8.5px] uppercase tracking-[0.18em] text-fg-4">{c.label}</span>
-            <span className="truncate font-serif text-[17px] italic leading-none text-fg" suppressHydrationWarning>
+            <span className="truncate font-mono text-[15px] font-medium leading-none text-fg" suppressHydrationWarning>
               {c.value}
             </span>
           </div>
