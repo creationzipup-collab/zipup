@@ -119,9 +119,9 @@ export function UsageDashboard() {
 
 function Stat({ label, value, hint, big }: { label: string; value: string; hint?: string; big?: boolean }) {
   return (
-    <div className={cn("flex flex-col gap-1 rounded-2xl border border-line bg-panel p-4", big && "col-span-2 lg:col-span-1")}>
+    <div className={cn("corners flex flex-col gap-2 rounded-2xl border border-line bg-white/[0.015] p-4", big && "col-span-2 lg:col-span-1")}>
       <span className="text-[12px] text-fg-3">{label}</span>
-      <span className={cn("font-semibold tracking-tight", big ? "text-[30px]" : "text-[24px]")}>{value}</span>
+      <span className={cn("num", big ? "text-[44px]" : "text-[38px]", big && "glow-text")}>{value}</span>
       {hint && <span className="text-[11.5px] text-fg-4">{hint}</span>}
     </div>
   );
@@ -129,9 +129,9 @@ function Stat({ label, value, hint, big }: { label: string; value: string; hint?
 
 function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-line bg-panel p-5">
+    <div className="rounded-2xl border border-line bg-white/[0.015] p-5">
       <div className="mb-4">
-        <h3 className="text-[14px] font-semibold">{title}</h3>
+        <h3 className="text-[14px] font-medium">{title}</h3>
         {subtitle && <p className="text-[12px] text-fg-4">{subtitle}</p>}
       </div>
       {children}

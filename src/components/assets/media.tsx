@@ -27,8 +27,15 @@ export function MediaThumb({
   autoPlayOnHover?: boolean;
   eager?: boolean;
 }) {
-  const ref = React.useRef<HTMLVideoElement>(null);
-  const [loaded, setLoaded] = React.useState(false);
+  const ref = React.useRef<HTMLVideoElement | null>(null);
+  // 불러오면 서서히 나타나기 — 하이드레이션 전에 이미 불러온 경우(onLoad가 안 옴)도 요소에서 직접 확인해요
+  const markVideo = React.useCallback((el: HTMLVideoElement | null) => {
+    ref.current = el;
+    if (el && el.readyState >= 2) el.dataset.loaded = "1";
+  }, []);
+  const markImg = React.useCallback((el: HTMLImageElement | null) => {
+    if (el && el.complete && el.naturalWidth > 0) el.dataset.loaded = "1";
+  }, []);
   if (kind === "video") {
     return (
       <div
@@ -41,14 +48,14 @@ export function MediaThumb({
         }}
       >
         <video
-          ref={ref}
+          ref={markVideo}
           src={`${src}#t=0.1`}
           muted
           loop
           playsInline
           preload="metadata"
-          onLoadedData={() => setLoaded(true)}
-          className={cn("size-full transition-opacity duration-300", fit === "cover" ? "object-cover" : "object-contain", loaded ? "opacity-100" : "opacity-0")}
+          onLoadedData={(e) => (e.currentTarget.dataset.loaded = "1")}
+          className={cn("size-full opacity-0 transition-opacity duration-300 data-[loaded=1]:opacity-100", fit === "cover" ? "object-cover" : "object-contain")}
         />
         <span className="pointer-events-none absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-md bg-black/55 px-1.5 py-0.5 font-mono text-[10.5px] text-white backdrop-blur">
           <Play className="size-2.5 fill-white" />
@@ -60,16 +67,16 @@ export function MediaThumb({
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
+      ref={markImg}
       src={thumb}
       alt={alt}
       loading={eager ? "eager" : "lazy"}
       decoding="async"
       draggable={false}
-      onLoad={() => setLoaded(true)}
+      onLoad={(e) => (e.currentTarget.dataset.loaded = "1")}
       className={cn(
-        "size-full bg-panel-3 transition-opacity duration-300",
+        "size-full bg-panel-3 opacity-0 transition-opacity duration-300 data-[loaded=1]:opacity-100",
         fit === "cover" ? "object-cover" : "object-contain",
-        loaded ? "opacity-100" : "opacity-0",
         className,
       )}
     />

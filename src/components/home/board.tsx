@@ -7,186 +7,62 @@ import * as React from "react";
 import { MediaThumb } from "@/components/assets/media";
 import { VerdictBadge, VERDICT_STYLE } from "@/components/assets/selection-controls";
 import { AmbientVideo } from "@/components/brand/ambient-video";
-import { Frame, Histogram, LiveDot, Metric, Pill, RingGauge, SegmentBar, Ticker } from "@/components/brand/hud";
+import { LiveDot, Pill } from "@/components/brand/hud";
 import { HeroPrompt } from "@/components/home/hero-prompt";
-import { useShell } from "@/components/shell/app-shell";
-import { Avatar, TimeAgo } from "@/components/ui/misc";
-import { getModel } from "@/lib/models/registry";
-import type { HomeBoard, HomeCut, HomeProject, HomeTake } from "@/lib/services/home";
+import { TimeAgo } from "@/components/ui/misc";
+import type { HomeBoard, HomeCut, HomeTake } from "@/lib/services/home";
 import { CUT_STATUS_LABEL, type CutStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const EASE = [0.2, 0.8, 0.2, 1] as const;
 const pad = (n: number) => String(n).padStart(2, "0");
-const DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const DAYS_EN = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
 export const STATUS_DOT: Record<CutStatus, string> = { todo: "bg-fg-4", wip: "bg-accent", review: "bg-info", done: "bg-success" };
 export const STATUS_PILL: Record<CutStatus, "line" | "accent" | "review" | "ok"> = { todo: "line", wip: "accent", review: "review", done: "ok" };
 
 /* ---------------------------------------------------------------------------------------------- */
-/*                                         히어로 (영상 위 계기판)                                    */
+/*                                   히어로: 영상 + 오늘 + 프롬프트                                   */
 /* ---------------------------------------------------------------------------------------------- */
 
 type RecentPrompt = { id: string; title: string; prompt: string; kind: "image" | "video" | "any" };
 
-export function HomeHero({
-  stats,
-  daily,
-  date,
-  recent,
-}: {
-  stats: HomeBoard["stats"];
-  daily: HomeBoard["daily"];
-  date: HomeBoard["today"];
-  recent: RecentPrompt[];
-}) {
-  const { budget } = useShell();
-  const okRate = stats.monthTakes ? Math.min(1, stats.monthOk / stats.monthTakes) : 0;
-  const values = daily.map((d) => d.value);
-  const today = values[values.length - 1] ?? 0;
-  const max = Math.max(0, ...values);
-  const avg = values.length ? values.reduce((s, v) => s + v, 0) / values.length : 0;
-
+/** 영상 한 장면 위에 오늘 날짜와 프롬프트만. 숫자판은 두지 않아요. */
+export function HomeHero({ date, recent, generating }: { date: HomeBoard["today"]; recent: RecentPrompt[]; generating: number }) {
   const reveal = (i: number) => ({
-    initial: { opacity: 0, y: 14, filter: "blur(6px)" },
+    initial: { opacity: 0, y: 18, filter: "blur(8px)" },
     animate: { opacity: 1, y: 0, filter: "blur(0px)" },
-    transition: { duration: 0.8, delay: 0.25 + i * 0.08, ease: EASE },
+    transition: { duration: 0.9, delay: 0.2 + i * 0.1, ease: EASE },
   });
-
   return (
     <section className="relative isolate -mt-14 overflow-hidden border-b border-line">
       <AmbientVideo />
-      <div className="relative mx-auto flex min-h-[min(88vh,820px)] w-full max-w-[1480px] flex-col px-4 pb-7 pt-[76px] sm:px-8">
-        {/* 윗줄: 위치 + 시계 */}
-        <div className="flex items-center justify-between gap-4 font-mono text-[10.5px] uppercase tracking-[0.2em] text-white/60">
-          <span className="truncate">
-            Creation Zipup <span className="px-1 text-white/30">/</span>
-            <span className="font-sans text-[12px] normal-case tracking-normal text-white/85">제작 현황</span>
-          </span>
-          <span className="flex items-center gap-2.5">
-            <span className="hidden sm:inline">KST</span>
-            <Clock className="dotnum text-[15px] tracking-[0.06em] text-white/90" />
+      <div className="relative mx-auto flex min-h-[min(88vh,840px)] w-full max-w-[1480px] flex-col justify-between px-4 pb-10 pt-[78px] sm:px-8 sm:pb-12">
+        <div className="flex items-center justify-between gap-4 font-mono text-[10.5px] uppercase tracking-[0.22em] text-white/55">
+          <span>Creation Zipup</span>
+          <span className="flex items-center gap-3">
+            {generating > 0 && (
+              <span className="flex items-center gap-2 normal-case tracking-normal text-white/80">
+                <LiveDot className="size-1.5" /> {generating}건 생성 중
+              </span>
+            )}
+            <Clock className="dotnum text-[15px] tracking-[0.06em] text-white/85" />
           </span>
         </div>
 
-        <div className="mt-6 grid flex-1 grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-[292px_minmax(0,1fr)_292px]">
-          {/* 가운데: 오늘 */}
-          <motion.div {...reveal(0)} className="col-span-2 flex flex-col items-center justify-center py-8 text-center lg:col-span-1 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:py-0">
-            <Pill tone="line" className="border-white/25 bg-black/20 text-white/85 backdrop-blur-md">
-              {stats.generating > 0 ? (
-                <>
-                  <LiveDot /> 지금 {stats.generating}건 생성 중
-                </>
-              ) : (
-                <>{DAYS[date.wd]}요일</>
-              )}
-            </Pill>
-            <h1 className="num mt-5 text-[clamp(88px,12vw,176px)] text-white [text-shadow:0_2px_40px_rgb(0_0_0/0.35)]">
-              {pad(date.m)}.{pad(date.d)}
-            </h1>
-            <p className="mt-3 font-mono text-[11px] tracking-[0.3em] text-white/70">
+        <div className="flex max-w-[820px] flex-col gap-7">
+          <motion.div {...reveal(0)}>
+            <p className="font-mono text-[11px] tracking-[0.32em] text-white/60">
               {DAYS_EN[date.wd]} · {date.y}
             </p>
+            <h1 className="num mt-3 text-[clamp(84px,11vw,160px)] text-white [text-shadow:0_2px_40px_rgb(0_0_0/0.3)]">
+              {pad(date.m)}.{pad(date.d)}
+            </h1>
           </motion.div>
-
-          {/* 왼쪽 */}
-          <motion.div {...reveal(1)} className="lg:col-start-1 lg:row-start-1">
-            <Frame variant="glass" className="h-full" bodyClassName="grid grid-cols-2 gap-0 p-0">
-              <div className="border-r border-white/10 p-4">
-                <Metric value={stats.activeCuts} unit="cuts" label="진행 중인 컷" size="md" />
-              </div>
-              <div className="p-4">
-                <Metric value={stats.todayTakes} unit="takes" label="오늘 테이크" size="md" />
-              </div>
-            </Frame>
-          </motion.div>
-          <motion.div {...reveal(2)} className="col-span-2 sm:col-span-1 lg:col-start-1 lg:row-start-2">
-            <Frame variant="glass" className="h-full" label="이번 달 OK율" aside={<span className="font-mono">{stats.monthTakes} TAKES</span>}>
-              <div className="flex flex-1 items-center justify-center gap-4">
-                <RingGauge value={okRate} size={148} label={`OK율 ${Math.round(okRate * 100)}%`}>
-                  <span className="num flex items-start text-[40px] text-white">
-                    <Ticker value={okRate * 100} format="pct" />
-                    <span className="num-unit mt-1">%</span>
-                  </span>
-                  <span className="mt-1 text-[10.5px] text-fg-3">OK / 전체</span>
-                </RingGauge>
-                <ul className="flex flex-col gap-2 text-[11.5px]">
-                  <li className="flex items-center gap-2">
-                    <span className="size-1.5 rounded-full bg-success" />
-                    <span className="w-9 text-fg-3">OK</span>
-                    <span className="font-mono text-fg">{stats.monthOk}</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="size-1.5 rounded-full bg-warning" />
-                    <span className="w-9 text-fg-3">KEEP</span>
-                    <span className="font-mono text-fg">{stats.monthKeep}</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="size-1.5 rounded-full bg-danger" />
-                    <span className="w-9 text-fg-3">NG</span>
-                    <span className="font-mono text-fg">{stats.monthNg}</span>
-                  </li>
-                </ul>
-              </div>
-            </Frame>
-          </motion.div>
-
-          {/* 오른쪽 */}
-          <motion.div {...reveal(3)} className="lg:col-start-3 lg:row-start-1">
-            <Frame variant="glass" className="h-full" bodyClassName="grid grid-cols-2 gap-0 p-0">
-              <div className="border-r border-white/10 p-4">
-                <Metric
-                  value={stats.generating}
-                  label={
-                    <span className="flex items-center gap-1.5">
-                      {stats.generating > 0 && <LiveDot className="size-1.5" />}생성 중
-                    </span>
-                  }
-                  size="md"
-                  tone={stats.generating > 0 ? "accent" : "fg"}
-                />
-              </div>
-              <div className="p-4">
-                <Metric value={budget.user.spent} format="usd" label="이번 달 내 사용" size="md" className="[&_.num]:text-[34px]" />
-              </div>
-            </Frame>
-          </motion.div>
-          <motion.div {...reveal(4)} className="col-span-2 sm:col-span-1 lg:col-start-3 lg:row-start-2">
-            <Frame
-              variant="glass"
-              className="h-full"
-              label="최근 14일 테이크"
-              aside={
-                <span className="font-mono">
-                  {daily[0]?.label} — {daily[daily.length - 1]?.label}
-                </span>
-              }
-            >
-              <div className="mt-auto flex flex-col gap-4 pt-8">
-                <Histogram data={daily} height={64} unit="개" />
-                <dl className="grid grid-cols-3 gap-2 border-t border-white/10 pt-3 text-[11px]">
-                  <div>
-                    <dt className="text-fg-4">평균</dt>
-                    <dd className="mt-0.5 font-mono text-[13px] text-fg">{avg.toFixed(1)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-fg-4">오늘</dt>
-                    <dd className="mt-0.5 font-mono text-[13px] text-accent">{today}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-fg-4">최고</dt>
-                    <dd className="mt-0.5 font-mono text-[13px] text-fg">{max}</dd>
-                  </div>
-                </dl>
-              </div>
-            </Frame>
+          <motion.div {...reveal(1)}>
+            <HeroPrompt recent={recent} />
           </motion.div>
         </div>
-
-        <motion.div {...reveal(5)} className="mx-auto mt-6 w-full max-w-[800px]">
-          <HeroPrompt recent={recent} />
-        </motion.div>
       </div>
     </section>
   );
@@ -216,13 +92,12 @@ function Clock({ className }: { className?: string }) {
 export function ActiveCuts({ cuts }: { cuts: HomeCut[] }) {
   if (!cuts.length) {
     return (
-      <Frame variant="dashed" bodyClassName="py-10 items-center text-center">
-        <p className="text-[13px] text-fg-2">작업 중이거나 검토 중인 컷이 없어요.</p>
-        <p className="mt-1 text-[12px] text-fg-4">프로젝트에서 컷을 나누고 생성하면 여기에 모여요.</p>
-        <Link href="/projects" className="mt-4 text-[12.5px] text-accent hover:underline hover:underline-offset-4">
-          프로젝트 열기 →
+      <p className="border-t border-line py-6 text-[13px] text-fg-3">
+        작업 중이거나 검토 중인 컷이 없어요. 프로젝트에서 컷을 나누고 생성하면 여기에 모여요.{" "}
+        <Link href="/projects" className="text-fg underline underline-offset-4 hover:text-accent">
+          프로젝트
         </Link>
-      </Frame>
+      </p>
     );
   }
   return (
@@ -287,94 +162,6 @@ export function ActiveCuts({ cuts }: { cuts: HomeCut[] }) {
           </Link>
         </motion.li>
       ))}
-    </ul>
-  );
-}
-
-/* ---------------------------------------------------------------------------------------------- */
-/*                                           지금 생성 중                                           */
-/* ---------------------------------------------------------------------------------------------- */
-
-export function LiveNow({ live }: { live: HomeBoard["live"] }) {
-  if (!live.length) {
-    return (
-      <Frame variant="dashed" bodyClassName="py-6">
-        <p className="text-[12.5px] text-fg-4">지금 생성 중인 사람이 없어요.</p>
-      </Frame>
-    );
-  }
-  return (
-    <ul className="flex flex-col border-t border-line">
-      {live.map((l, i) => (
-        <li key={i} className="flex items-center gap-3 border-b border-line py-2.5">
-          <Avatar name={l.userName} size={26} />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[12.5px]">
-              {l.userName} <span className="text-fg-4">· {getModel(l.modelId)?.shortName ?? l.modelId}</span>
-            </span>
-            <span className="block truncate font-mono text-[10.5px] text-fg-4">
-              {l.projectName}
-              {l.cutCode ? ` / ${l.cutCode}` : ""}
-            </span>
-          </span>
-          <LiveDot className="size-1.5" />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/* ---------------------------------------------------------------------------------------------- */
-/*                                           프로젝트 진행                                          */
-/* ---------------------------------------------------------------------------------------------- */
-
-export function ProjectProgress({ projects }: { projects: HomeProject[] }) {
-  if (!projects.length) {
-    return (
-      <Frame variant="dashed" bodyClassName="py-6">
-        <p className="text-[12.5px] text-fg-4">함께 쓰는 프로젝트가 아직 없어요.</p>
-      </Frame>
-    );
-  }
-  return (
-    <ul className="flex flex-col border-t border-line">
-      {projects.map((p) => {
-        const total = p.cuts.todo + p.cuts.wip + p.cuts.review + p.cuts.done;
-        return (
-          <li key={p.id} className="border-b border-line">
-            <Link href={`/projects/${p.id}`} className="group block py-3">
-              <span className="flex items-baseline justify-between gap-3">
-                <span className="flex min-w-0 items-center gap-2">
-                  <span className="size-1.5 shrink-0 rounded-full" style={{ background: p.color ?? "var(--fg-4)" }} />
-                  <span className="truncate text-[13px] font-medium transition group-hover:text-accent">{p.name}</span>
-                </span>
-                <span className="shrink-0 font-mono text-[10.5px] text-fg-4">{total ? `${p.cuts.done}/${total} CUT` : `${p.takes} TAKE`}</span>
-              </span>
-              <SegmentBar
-                className="mt-2.5"
-                parts={[
-                  { value: p.cuts.done, className: "bg-success", label: "확정" },
-                  { value: p.cuts.review, className: "bg-info", label: "검토" },
-                  { value: p.cuts.wip, className: "bg-accent shadow-[0_0_8px_var(--accent-glow)]", label: "작업 중" },
-                  { value: p.cuts.todo, className: "bg-white/15", label: "대기" },
-                ]}
-              />
-              <span className="mt-2 flex items-center gap-3 text-[10.5px] text-fg-4">
-                {total > 0 && (
-                  <>
-                    <span>확정 {p.cuts.done}</span>
-                    <span>검토 {p.cuts.review}</span>
-                    <span>작업 {p.cuts.wip}</span>
-                  </>
-                )}
-                <span className="ml-auto">
-                  <TimeAgo date={p.lastActivityAt} />
-                </span>
-              </span>
-            </Link>
-          </li>
-        );
-      })}
     </ul>
   );
 }

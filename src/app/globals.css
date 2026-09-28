@@ -172,23 +172,6 @@
   }
 }
 
-@keyframes clap {
-  0%,
-  42% {
-    transform: rotate(-22deg);
-  }
-  58% {
-    transform: rotate(0deg);
-  }
-  68% {
-    transform: rotate(-4deg);
-  }
-  78%,
-  100% {
-    transform: rotate(0deg);
-  }
-}
-
 @keyframes leader-num {
   0% {
     opacity: 1;
@@ -495,12 +478,6 @@
     animation: leader-num 3s steps(1, end) infinite;
   }
 
-  /* 슬레이트: 윗막대가 한 번 "딱" */
-  .slate-clapper {
-    transform-origin: 0% 100%;
-    animation: clap 1.15s cubic-bezier(0.3, 0.7, 0.3, 1) both;
-  }
-
   /* 숫자 매긴 섹션 머리 */
   .section-index {
     font-family: var(--font-mono);
@@ -513,7 +490,6 @@
     .film-leader-num {
       display: none;
     }
-    .slate-clapper,
     .shutter-line {
       animation: none;
     }

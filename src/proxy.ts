@@ -24,5 +24,6 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|robots.txt).*)"],
+  // media/: 로그인 화면에서도 쓰는 배경 영상·포스터 (미들웨어를 거치지 않고 CDN에서 바로)
+  matcher: ["/((?!_next/static|_next/image|media/|favicon.ico|icon.svg|robots.txt).*)"],
 };

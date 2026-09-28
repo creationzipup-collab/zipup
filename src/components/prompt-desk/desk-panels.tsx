@@ -4,12 +4,14 @@ import { AtSign, BookmarkPlus, ChevronDown, GitCompareArrows, History, Languages
 import { AnimatePresence, motion } from "motion/react";
 import * as React from "react";
 
-import { DiffBadge, DiffView } from "@/components/prompt-desk/diff-view";
+import { DiffBadge, DiffOps, DiffView } from "@/components/prompt-desk/diff-view";
 import type { DeskDoc } from "@/components/prompt-desk/versions";
 import { Button, Spinner } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/controls";
 import { Menu, MenuContent, MenuItem, MenuTrigger, Tip } from "@/components/ui/menu";
+import { useTranslation } from "@/lib/client/prompt-tools";
 import { diffStats, diffWords } from "@/lib/prompt/diff";
+import { diffSegments, type SegmentChange, splitClauses, type Unit } from "@/lib/prompt/segment-diff";
 import { cn } from "@/lib/utils";
 
 export type DeskTab = "ko" | "mentions" | "diff" | "versions";
@@ -54,9 +56,9 @@ export function DocChip({
         )}
         {doc && dirty && <DiffBadge from={doc.baseText} to={text} />}
       </button>
-      <Tip content={`${label}에 버전 저장`} shortcut="⌘S">
-        <Button variant={dirty ? "secondary" : "ghost"} size="icon-xs" onClick={onSave} disabled={!text.trim()} aria-label="버전 저장">
-          <Save />
+      <Tip content={`버전은 ${label} 안에서만 쌓여요 (라이브러리에는 안 올라가요)`} shortcut="⌘S">
+        <Button variant={dirty ? "secondary" : "ghost"} size="xs" onClick={onSave} disabled={!text.trim()} aria-label={`${label}에 버전 저장`} className={cn(dirty && "border-accent/40 text-fg")}>
+          <Save /> {label}에 저장
         </Button>
       </Tip>
       <Menu>
@@ -152,9 +154,26 @@ export function DeskTabs({
   );
 }
 
-/** 변경 비교: 기준(저장된 버전·붙여넣기 전·마지막 생성·고른 버전)과 지금 내용 */
+/**
+ * 변경 비교 + 한국어 뜻: 기준(저장된 버전·붙여넣기 전·마지막 생성·고른 버전)과 지금 글을 구간마다 비교해서
+ * 어디가 바뀌었는지, 원래 뜻이 무엇이었고 지금은 무슨 뜻인지 함께 보여줘요.
+ */
 export function DiffPanel({ baselines, active, onPick, current }: { baselines: Baseline[]; active: Baseline | null; onPick: (b: Baseline) => void; current: string }) {
   const stats = React.useMemo(() => (active ? diffStats(diffWords(active.text, current)) : null), [active, current]);
+  const trBefore = useTranslation(active?.text ?? "", !!active);
+  const trAfter = useTranslation(current, !!active);
+  const [showSame, setShowSame] = React.useState(false);
+  const [showFull, setShowFull] = React.useState(false);
+  const units = React.useCallback(
+    (text: string, tr: ReturnType<typeof useTranslation>): Unit[] =>
+      tr.data && !tr.stale && tr.data.segments.length ? tr.data.segments.map((s) => ({ text: s.src, ko: s.dst })) : splitClauses(text),
+    [],
+  );
+  const changes = React.useMemo(() => (active ? diffSegments(units(active.text, trBefore), units(current, trAfter)) : []), [active, current, trBefore, trAfter, units]);
+  const translating = trBefore.loading || trAfter.loading;
+  const changed = changes.filter((c) => c.type !== "same");
+  const same = changes.filter((c) => c.type === "same");
+
   if (!baselines.length || !active) {
     return (
       <div className="flex flex-col items-start gap-2 rounded-xl border border-dashed border-line-2 p-4">
@@ -182,21 +201,93 @@ export function DiffPanel({ baselines, active, onPick, current }: { baselines: B
         )}
       </div>
       {active.text === current ? (
-        <p className="rounded-xl bg-panel-2/60 px-3 py-4 text-center text-[12.5px] text-fg-3">{active.label}와(과) 똑같아요.</p>
+        <p className="rounded-xl bg-white/[0.03] px-3 py-4 text-center text-[12.5px] text-fg-3">{active.label}와(과) 똑같아요.</p>
       ) : (
-        <div className="max-h-[46vh] overflow-y-auto rounded-xl border border-line bg-bg-2/60 p-3.5 scrollbar-thin">
-          <DiffView from={active.text} to={current} />
-        </div>
+        <>
+          <div className="flex items-center gap-2 text-[11.5px] text-fg-4">
+            <span>
+              바뀐 구간 <b className="font-medium text-fg-2">{changed.length}</b>
+            </span>
+            {translating && (
+              <span className="flex items-center gap-1.5">
+                <Spinner className="size-3" /> 한국어 뜻 불러오는 중
+              </span>
+            )}
+            <span className="ml-auto">원래 뜻 → 바뀐 뜻</span>
+          </div>
+          <ol className="flex max-h-[52vh] flex-col gap-2 overflow-y-auto pr-1 scrollbar-thin">
+            {changed.map((c, i) => (
+              <ChangeRow key={i} change={c} />
+            ))}
+            {showSame &&
+              same.map((c, i) =>
+                c.type === "same" ? (
+                  <li key={`s${i}`} className="grid grid-cols-[46px_minmax(0,1fr)] gap-3 rounded-xl px-3 py-2 text-[12.5px] text-fg-4">
+                    <span className="pt-0.5 font-mono text-[10.5px] tracking-[0.08em]">SAME</span>
+                    <span className="min-w-0">
+                      <span className="block text-fg-3">{c.after.text}</span>
+                      {c.after.ko && <span className="mt-0.5 block">{c.after.ko}</span>}
+                    </span>
+                  </li>
+                ) : null,
+              )}
+          </ol>
+          <div className="flex flex-wrap items-center gap-3 text-[11.5px]">
+            {same.length > 0 && (
+              <button type="button" onClick={() => setShowSame((v) => !v)} className="text-fg-3 transition hover:text-fg">
+                {showSame ? "그대로인 구간 숨기기" : `그대로인 구간 ${same.length}개 보기`}
+              </button>
+            )}
+            <button type="button" onClick={() => setShowFull((v) => !v)} className="text-fg-3 transition hover:text-fg">
+              {showFull ? "전체 글 닫기" : "전체 글에서 보기"}
+            </button>
+          </div>
+          {showFull && (
+            <div className="max-h-[40vh] overflow-y-auto rounded-xl border border-line bg-white/[0.015] p-3.5 scrollbar-thin">
+              <DiffView from={active.text} to={current} />
+            </div>
+          )}
+        </>
       )}
-      <p className="flex flex-wrap items-center gap-3 text-[11px] text-fg-4">
-        <span className="flex items-center gap-1">
-          <ins className="rounded bg-success/15 px-1 text-success no-underline">추가</ins> 새로 들어간 단어
-        </span>
-        <span className="flex items-center gap-1">
-          <del className="rounded bg-danger/12 px-1 text-danger">삭제</del> 빠진 단어
-        </span>
-      </p>
     </div>
+  );
+}
+
+/** 바뀐 구간 하나: 글의 변화 + 원래 뜻 → 바뀐 뜻 (뜻도 달라진 말에 색) */
+function ChangeRow({ change }: { change: SegmentChange }) {
+  if (change.type === "same") return null;
+  const tag = { changed: { label: "바뀜", cls: "border-accent/40 bg-accent/10 text-accent" }, added: { label: "추가", cls: "border-success/40 bg-success/10 text-success" }, removed: { label: "빠짐", cls: "border-danger/40 bg-danger/10 text-danger" } }[change.type];
+  const beforeKo = change.type === "added" ? null : change.before.ko;
+  const afterKo = change.type === "removed" ? null : change.after.ko;
+  return (
+    <li className="grid grid-cols-[46px_minmax(0,1fr)] gap-3 rounded-xl border border-line bg-white/[0.015] px-3 py-2.5">
+      <span className={cn("mt-0.5 inline-flex h-5 items-center justify-center rounded-full border text-[10.5px] font-medium", tag.cls)}>{tag.label}</span>
+      <div className="min-w-0">
+        {change.type === "changed" ? (
+          <DiffOps ops={change.ops} compact />
+        ) : change.type === "added" ? (
+          <p className="text-[12.5px] leading-[1.8] text-success">{change.after.text}</p>
+        ) : (
+          <p className="text-[12.5px] leading-[1.8] text-danger/90 line-through decoration-danger/60">{change.before.text}</p>
+        )}
+        {(beforeKo || afterKo) && (
+          <div className="mt-2 grid gap-1 border-t border-line pt-2 text-[12.5px] leading-relaxed">
+            {beforeKo && (
+              <div className="grid grid-cols-[34px_minmax(0,1fr)] gap-2">
+                <span className="text-fg-4">원래</span>
+                <span className={cn("text-fg-3", change.type === "removed" && "line-through decoration-danger/50")}>{beforeKo}</span>
+              </div>
+            )}
+            {afterKo && (
+              <div className="grid grid-cols-[34px_minmax(0,1fr)] gap-2">
+                <span className="text-fg-4">지금</span>
+                {beforeKo ? <DiffOps ops={diffWords(beforeKo, afterKo)} compact className="!text-[12.5px] !leading-relaxed" /> : <span className="text-fg">{afterKo}</span>}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </li>
   );
 }
 

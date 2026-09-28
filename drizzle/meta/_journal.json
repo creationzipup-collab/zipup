@@ -43,6 +43,13 @@
       "when": 1790588143683,
       "tag": "0005_prompt_hub_cut_docs",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790602706219,
+      "tag": "0006_prompt_origin",
+      "breakpoints": true
     }
   ]
 }

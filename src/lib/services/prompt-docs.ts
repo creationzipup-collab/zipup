@@ -47,6 +47,8 @@ export async function createPresetWithVersion(
     tags?: string[];
     visibility: Visibility;
     note?: string | null;
+    /** 나온 곳 (프로젝트·컷) */
+    origin?: { projectId: string | null; cutId: string | null } | null;
   },
 ) {
   return db.transaction(async (tx) => {
@@ -63,6 +65,8 @@ export async function createPresetWithVersion(
         userId: u.id,
         teamId: u.teamId,
         latestVersion: 1,
+        originProjectId: input.origin?.projectId ?? null,
+        originCutId: input.origin?.cutId ?? null,
       })
       .returning();
     const [version] = await tx
@@ -225,6 +229,8 @@ export type LibraryItem = {
     seen: boolean;
   } | null;
   clip: LibraryClip | null;
+  /** 나온 곳: 어느 프로젝트의 어느 컷 (저장할 때 기록, 없으면 함께 보낸 클립 기준) */
+  origin: { projectId: string; projectName: string; personal: boolean; cutId: string | null; cutCode: string | null } | null;
   messages: number;
   lastMessageAt: string | null;
 };
@@ -276,7 +282,10 @@ export async function libraryList(u: CurrentUser, opts: { tab: LibraryTab; q?: s
   const sender = alias(user, "sender");
   const receiver = alias(user, "receiver");
   const clip = alias(assets, "clip");
+  const originProject = alias(projects, "origin_project");
+  const originCut = alias(cuts, "origin_cut");
   const filters = [searchCond(opts.q), kindCond(opts.kind)];
+  const originCols = { originName: originProject.name, originPersonal: originProject.isPersonal, originCode: originCut.code };
 
   type Row = {
     p: PresetRow;
@@ -288,18 +297,23 @@ export async function libraryList(u: CurrentUser, opts: { tab: LibraryTab; q?: s
     a: AssetRow | null;
     projectName: string | null;
     cutCode: string | null;
+    originName: string | null;
+    originPersonal: boolean | null;
+    originCode: string | null;
   };
   let rows: Row[];
 
   if (opts.tab === "saved") {
     // 내가 저장한 라이브러리 프롬프트 (컷 작업 기록은 제외)
     const saved = await db
-      .select({ p: promptPresets, owner: owner.name, a: clip, projectName: projects.name, cutCode: cuts.code })
+      .select({ p: promptPresets, owner: owner.name, a: clip, projectName: projects.name, cutCode: cuts.code, ...originCols })
       .from(promptPresets)
       .innerJoin(owner, eq(owner.id, promptPresets.userId))
       .leftJoin(clip, and(eq(clip.id, promptPresets.sourceAssetId), isNull(clip.deletedAt)))
       .leftJoin(projects, eq(projects.id, clip.projectId))
       .leftJoin(cuts, eq(cuts.id, clip.cutId))
+      .leftJoin(originProject, eq(originProject.id, promptPresets.originProjectId))
+      .leftJoin(originCut, eq(originCut.id, promptPresets.originCutId))
       .where(and(eq(promptPresets.userId, u.id), isNull(promptPresets.projectId), ...filters))
       .orderBy(desc(promptPresets.updatedAt))
       .limit(200);
@@ -322,6 +336,7 @@ export async function libraryList(u: CurrentUser, opts: { tab: LibraryTab; q?: s
         a: clip,
         projectName: projects.name,
         cutCode: cuts.code,
+        ...originCols,
       })
       .from(promptShares)
       .innerJoin(promptPresets, eq(promptPresets.id, promptShares.presetId))
@@ -332,6 +347,8 @@ export async function libraryList(u: CurrentUser, opts: { tab: LibraryTab; q?: s
       .leftJoin(clip, and(eq(clip.id, sql`coalesce(${promptShares.assetId}, ${promptPresets.sourceAssetId})`), isNull(clip.deletedAt)))
       .leftJoin(projects, eq(projects.id, clip.projectId))
       .leftJoin(cuts, eq(cuts.id, clip.cutId))
+      .leftJoin(originProject, eq(originProject.id, promptPresets.originProjectId))
+      .leftJoin(originCut, eq(originCut.id, promptPresets.originCutId))
       .where(and(where, ...filters))
       .orderBy(desc(promptShares.createdAt))
       .limit(300);
@@ -385,6 +402,11 @@ export async function libraryList(u: CurrentUser, opts: { tab: LibraryTab; q?: s
             }
           : null,
         clip: await clipOf(r.a, r.projectName, r.cutCode),
+        origin: r.p.originProjectId
+          ? { projectId: r.p.originProjectId, projectName: r.originName ?? "", personal: !!r.originPersonal, cutId: r.p.originCutId, cutCode: r.originCode }
+          : r.a
+            ? { projectId: r.a.projectId, projectName: r.projectName ?? "", personal: false, cutId: r.a.cutId, cutCode: r.cutCode }
+            : null,
         messages: m?.n ?? 0,
         lastMessageAt: m?.last ? new Date(m.last).toISOString() : null,
       };
@@ -479,6 +501,7 @@ export async function sendPrompt(
         tags: p.tags,
         visibility: "private",
         note: null,
+        origin: { projectId: p.projectId, cutId: p.cutId },
       });
       preset = copy;
     } else {
@@ -506,6 +529,7 @@ export async function sendPrompt(
           tags: [],
           visibility: "private",
           note: null,
+          origin: source ? { projectId: source.projectId, cutId: source.cutId } : null,
         })
       ).preset;
   }
@@ -513,6 +537,10 @@ export async function sendPrompt(
   const patch: Partial<typeof promptPresets.$inferInsert> = {};
   if (input.title?.trim() && preset.userId === u.id && input.title.trim() !== preset.title) patch.title = input.title.trim().slice(0, 80);
   if (source) patch.sourceAssetId = source.id;
+  if (source && !preset.originProjectId && preset.userId === u.id) {
+    patch.originProjectId = source.projectId;
+    patch.originCutId = source.cutId;
+  }
   if (Object.keys(patch).length) [preset] = await db.update(promptPresets).set(patch).where(eq(promptPresets.id, preset.id)).returning();
 
   const recipients = userIds.length

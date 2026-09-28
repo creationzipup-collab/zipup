@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 import { handle, readJson } from "@/lib/api";
+import { requireProject } from "@/lib/services/access";
+import { assertCutInProject } from "@/lib/services/cuts";
 import { createPresetWithVersion, libraryList, type LibraryTab } from "@/lib/services/prompt-docs";
 import { apiUser } from "@/lib/session";
 
@@ -23,12 +25,21 @@ const Body = z.object({
   tags: z.array(z.string().trim().min(1).max(30)).max(10).default([]),
   visibility: z.enum(["private", "team", "company"]).default("private"),
   note: z.string().trim().max(200).nullish(),
+  /** 나온 곳 (스튜디오에서 저장할 때 지금 프로젝트·컷) */
+  projectId: z.string().uuid().nullish(),
+  cutId: z.string().uuid().nullish(),
 });
 
 /** 라이브러리에 저장 (v1 버전과 함께). 다른 사람에게 보내려면 /api/prompts/share */
 export const POST = handle(async (req: Request) => {
   const u = await apiUser();
-  const b = Body.parse(await readJson(req));
-  const { preset, version } = await createPresetWithVersion(u, b);
+  const { projectId, cutId, ...b } = Body.parse(await readJson(req));
+  let origin: { projectId: string; cutId: string | null } | null = null;
+  if (projectId) {
+    await requireProject(u, projectId, "viewer");
+    if (cutId) await assertCutInProject(cutId, projectId);
+    origin = { projectId, cutId: cutId ?? null };
+  }
+  const { preset, version } = await createPresetWithVersion(u, { ...b, origin });
   return { item: preset, version: version.version };
 });

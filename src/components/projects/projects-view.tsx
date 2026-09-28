@@ -1,12 +1,13 @@
 "use client";
 
-import { Archive, FolderKanban, Globe, Image as ImageIcon, Lock, Plus, Search, Users } from "lucide-react";
+import { Archive, FolderKanban, Globe, Lock, Plus, Search, Users } from "lucide-react";
+import { motion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 
 import { MediaThumb } from "@/components/assets/media";
-import { trackSpotlight } from "@/components/brand/motion";
+import { SegmentBar } from "@/components/brand/hud";
 import { PageTitle } from "@/components/brand/page-title";
 import { ProjectFormDialog } from "@/components/projects/project-dialogs";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,9 @@ import { type Visibility, VISIBILITY_LABEL } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const VIS_ICON = { private: Lock, team: Users, company: Globe } as const;
+const EASE = [0.2, 0.8, 0.2, 1] as const;
 
+/** 프로젝트 목록 — 한 줄에 한 프로젝트: 표지, 이름, 컷·테이크·OK, 컷 진행, 최근 활동 */
 export function ProjectsView({
   items,
   archived,
@@ -53,18 +56,18 @@ export function ProjectsView({
       <PageTitle
         label="Projects"
         title={archived ? "보관된 프로젝트" : "프로젝트"}
-        subtitle="생성물·컬렉션·노드 캔버스를 프로젝트 단위로 묶어 팀과 공유해요."
+        subtitle="프로젝트 › 컷 › 테이크. 컷을 나누지 않고 프로젝트에 바로 쌓아도 돼요."
         actions={
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" onClick={() => router.push(archived ? "/projects" : "/projects?archived=1")}>
-            <Archive /> {archived ? "활성 프로젝트" : "보관함"}
-          </Button>
-          {canCreate && !archived && (
-            <Button variant="primary" onClick={() => setOpen(true)}>
-              <Plus /> 새 프로젝트
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" onClick={() => router.push(archived ? "/projects" : "/projects?archived=1")}>
+              <Archive /> {archived ? "활성 프로젝트" : "보관함"}
             </Button>
-          )}
-        </div>
+            {canCreate && !archived && (
+              <Button variant="primary" onClick={() => setOpen(true)}>
+                <Plus /> 새 프로젝트
+              </Button>
+            )}
+          </div>
         }
       />
 
@@ -75,7 +78,7 @@ export function ProjectsView({
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="프로젝트 검색"
-            className="h-9 w-full rounded-[10px] border border-line-2 bg-panel/80 pl-9 pr-3 text-sm outline-none focus:border-fg-3"
+            className="h-9 w-full rounded-full border border-line-2 bg-white/[0.03] pl-9 pr-3 text-sm outline-none transition focus:border-accent/60"
           />
         </div>
         <Segmented
@@ -88,6 +91,7 @@ export function ProjectsView({
             { value: "shared", label: "전사 공개" },
           ]}
         />
+        <span className="ml-auto font-mono text-[11px] text-fg-4">{shown.length} PROJECTS</span>
       </div>
 
       {shown.length === 0 ? (
@@ -95,51 +99,94 @@ export function ProjectsView({
           icon={<FolderKanban />}
           title="프로젝트가 없어요"
           description="프로젝트로 생성물·컷·캔버스를 묶어 팀과 같이 써요."
-          action={canCreate && !archived ? <Button variant="primary" onClick={() => setOpen(true)}><Plus /> 새 프로젝트</Button> : undefined}
+          action={
+            canCreate && !archived ? (
+              <Button variant="primary" onClick={() => setOpen(true)}>
+                <Plus /> 새 프로젝트
+              </Button>
+            ) : undefined
+          }
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-          {shown.map((p) => {
-            const Vis = VIS_ICON[p.visibility];
-            return (
-              <Link
-                key={p.id}
-                href={`/projects/${p.id}`}
-                onPointerMove={trackSpotlight}
-                className="spotlight group flex flex-col overflow-hidden rounded-2xl border border-line bg-panel transition duration-300 hover:-translate-y-0.5 hover:border-line-2 hover:shadow-[var(--shadow-soft)]"
-              >
-                <div className="relative aspect-[16/9] overflow-hidden bg-panel-2">
-                  {p.cover ? (
-                    <MediaThumb kind={p.cover.kind} thumb={p.cover.urls.thumb} src={p.cover.urls.src} className="transition duration-500 group-hover:scale-[1.03]" autoPlayOnHover={false} />
-                  ) : (
-                    <div className="absolute inset-0" style={{ background: `radial-gradient(120% 90% at 20% 10%, ${p.isPersonal ? "#777" : p.color ?? "#ff5b24"}55, transparent 60%), var(--panel-2)` }}>
-                      <FolderKanban className="absolute bottom-3 right-3 size-6 text-fg-4" />
-                    </div>
-                  )}
-                  <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-md bg-black/55 px-1.5 py-0.5 text-[10.5px] text-white backdrop-blur">
-                    <Vis className="size-3" /> {p.isPersonal ? "개인" : VISIBILITY_LABEL[p.visibility]}
-                  </span>
-                </div>
-                <div className="flex flex-1 flex-col gap-2 p-4">
-                  <div className="flex items-center gap-2">
-                    <span className="size-2 shrink-0 rounded-sm" style={{ background: p.isPersonal ? "var(--fg-3)" : p.color ?? "var(--accent)" }} />
-                    <span className="truncate text-[15px] font-semibold">{p.name}</span>
-                  </div>
-                  <p className={cn("line-clamp-2 text-[12.5px] leading-relaxed", p.description ? "text-fg-3" : "text-fg-4")}>{p.description || (p.isPersonal ? "나만 보는 개인 작업공간" : "설명 없음")}</p>
-                  <div className="mt-auto flex items-center gap-3 pt-2 text-[11.5px] text-fg-4">
-                    <span className="inline-flex items-center gap-1"><ImageIcon className="size-3" /> {p.assetCount}</span>
-                    <span className="inline-flex items-center gap-1"><Users className="size-3" /> {p.memberCount}</span>
-                    {p.teamName && <span className="truncate">{p.teamName}</span>}
-                    <TimeAgo date={p.lastActivityAt} className="ml-auto" />
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
+        <div className="flex flex-col">
+          {/* 머리줄 */}
+          <div className="hidden grid-cols-[120px_minmax(0,1fr)_76px_76px_76px_170px_96px] items-end gap-5 border-b border-line px-3 pb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-fg-4 lg:grid">
+            <span />
+            <span>Project</span>
+            <span className="text-right">Cuts</span>
+            <span className="text-right">Takes</span>
+            <span className="text-right">OK</span>
+            <span>Progress</span>
+            <span className="text-right">Updated</span>
+          </div>
+          <ul className="flex flex-col">
+            {shown.map((p, i) => {
+              const Vis = VIS_ICON[p.visibility];
+              const color = p.isPersonal ? "var(--fg-3)" : (p.color ?? "var(--accent)");
+              return (
+                <motion.li key={p.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: Math.min(i, 12) * 0.03, ease: EASE }}>
+                  <Link
+                    href={`/projects/${p.id}`}
+                    className="group relative grid grid-cols-[88px_minmax(0,1fr)] items-center gap-4 border-b border-line px-3 py-3.5 transition-colors hover:bg-white/[0.02] lg:grid-cols-[120px_minmax(0,1fr)_76px_76px_76px_170px_96px] lg:gap-5"
+                  >
+                    <span aria-hidden className="absolute inset-y-2 left-0 w-px origin-center scale-y-0 bg-accent shadow-[0_0_8px_var(--accent-glow)] transition-transform duration-300 group-hover:scale-y-100" />
+                    <span className="relative block aspect-video overflow-hidden rounded-md bg-panel-3 ring-1 ring-white/[0.06]">
+                      {p.cover ? (
+                        <MediaThumb kind={p.cover.kind} thumb={p.cover.urls.thumb} src={p.cover.urls.src} autoPlayOnHover={false} className="transition duration-500 group-hover:scale-[1.04]" />
+                      ) : (
+                        <span className="absolute inset-0" style={{ background: `radial-gradient(120% 120% at 15% 0%, color-mix(in oklab, ${color} 38%, transparent), transparent 62%)` }} />
+                      )}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-2">
+                        <span className="size-1.5 shrink-0 rounded-full" style={{ background: color }} />
+                        <span className="truncate text-[15px] font-medium transition group-hover:text-accent">{p.name}</span>
+                        <span className="hidden shrink-0 items-center gap-1 rounded-full border border-line-2 px-2 py-px text-[10.5px] text-fg-3 sm:inline-flex">
+                          <Vis className="size-3" /> {p.isPersonal ? "개인" : VISIBILITY_LABEL[p.visibility]}
+                        </span>
+                      </span>
+                      <span className="mt-1 block truncate text-[12px] text-fg-4">
+                        {p.description || (p.isPersonal ? "나만 보는 개인 작업공간" : "설명 없음")}
+                        {p.teamName ? ` · ${p.teamName}` : ""}
+                        {` · 멤버 ${p.memberCount}`}
+                      </span>
+                      {/* 좁은 화면: 숫자를 한 줄로 */}
+                      <span className="mt-1.5 flex items-center gap-3 font-mono text-[10.5px] text-fg-4 lg:hidden">
+                        <span>{p.cuts.total} CUTS</span>
+                        <span>{p.assetCount} TAKES</span>
+                        <span className={p.okCount ? "text-success" : undefined}>OK {p.okCount}</span>
+                        <TimeAgo date={p.lastActivityAt} className="ml-auto font-sans" />
+                      </span>
+                    </span>
+                    <Num value={p.cuts.total} />
+                    <Num value={p.assetCount} />
+                    <Num value={p.okCount} tone={p.okCount ? "text-success" : undefined} />
+                    <span className="hidden flex-col gap-1.5 lg:flex">
+                      <SegmentBar
+                        parts={[
+                          { value: p.cuts.done, className: "bg-success", label: "확정" },
+                          { value: p.cuts.active, className: "bg-accent shadow-[0_0_8px_var(--accent-glow)]", label: "진행" },
+                          { value: Math.max(0, p.cuts.total - p.cuts.done - p.cuts.active), className: "bg-white/15", label: "대기" },
+                        ]}
+                      />
+                      <span className="font-mono text-[10px] text-fg-4">{p.cuts.total ? `${p.cuts.done}/${p.cuts.total} 확정` : "컷 없이"}</span>
+                    </span>
+                    <span className="hidden text-right text-[11.5px] text-fg-4 lg:block">
+                      <TimeAgo date={p.lastActivityAt} />
+                    </span>
+                  </Link>
+                </motion.li>
+              );
+            })}
+          </ul>
         </div>
       )}
 
       <ProjectFormDialog open={open} onOpenChange={setOpen} canChooseTeam={canChooseTeam} initial={{ teamId: myTeamId, visibility: defaultVisibility }} />
     </div>
   );
+}
+
+function Num({ value, tone }: { value: number; tone?: string }) {
+  return <span className={cn("num hidden text-right text-[28px] lg:block", tone ?? "text-fg")}>{value.toLocaleString("ko-KR")}</span>;
 }

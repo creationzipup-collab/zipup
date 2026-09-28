@@ -489,9 +489,18 @@ export const promptPresets = pgTable(
      */
     projectId: uuid().references(() => projects.id, { onDelete: "cascade" }),
     cutId: uuid().references(() => cuts.id, { onDelete: "cascade" }),
+    /** 라이브러리 프롬프트가 나온 곳 — 스튜디오에서 저장한 프로젝트·컷, 보낸 클립의 프로젝트·컷 */
+    originProjectId: uuid().references(() => projects.id, { onDelete: "set null" }),
+    originCutId: uuid().references(() => cuts.id, { onDelete: "set null" }),
     ...timestamps,
   },
-  (t) => [index().on(t.userId), index().on(t.teamId), index().on(t.sharedAt), index().on(t.projectId, t.cutId, t.kind)],
+  (t) => [
+    index().on(t.userId),
+    index().on(t.teamId),
+    index().on(t.sharedAt),
+    index().on(t.projectId, t.cutId, t.kind),
+    index().on(t.originProjectId, t.originCutId),
+  ],
 );
 
 /**

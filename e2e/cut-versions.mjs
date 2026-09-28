@@ -74,6 +74,9 @@ try {
   const jihoon = dir.people.find((p) => p.email === "jihoon@creationzipup.com");
   const sent = await api("/api/prompts/share", { method: "POST", body: { presetId: view.doc.id, title: "등대 · 안개 빨간 빔", message: "C001 이 버전 봐 주세요", to: { users: [jihoon.id] } } });
   sent.presetId !== view.doc.id ? ok("sending a cut version sends a library copy") : fail("sent the cut doc itself");
+  const sentTab = await api("/api/prompts?tab=sent");
+  const copy = sentTab.items.find((i) => i.id === sent.presetId);
+  copy?.origin?.cutId === cutId ? ok(`library copy keeps origin ${copy.origin.projectName} / ${copy.origin.cutCode}`) : fail(`origin on copy: ${JSON.stringify(copy?.origin)}`);
 } catch (e) {
   fail(e.message);
 }

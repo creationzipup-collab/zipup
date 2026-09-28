@@ -13,7 +13,7 @@ import { getSettings } from "@/lib/services/settings";
 import type { CurrentUser } from "@/lib/session";
 import type { ProjectRole, Visibility } from "@/lib/types";
 
-export const PROJECT_COLORS = ["#FF5B24", "#4C8DFF", "#A974FF", "#FF7CD9", "#3DD68C", "#F5C542", "#7CF7FF", "#E5E5E5"];
+export const PROJECT_COLORS = ["#1EA7FF", "#A48BFF", "#3DDC97", "#F5B83D", "#FF7CA8", "#7CF7FF", "#FF8A5C", "#E5E5E5"];
 
 export async function listProjects(u: CurrentUser, opts: { archived?: boolean; q?: string } = {}) {
   const rows = await db
@@ -23,7 +23,11 @@ export async function listProjects(u: CurrentUser, opts: { archived?: boolean; q
       teamName: teams.name,
       ownerName: user.name,
       assetCount: sql<number>`(select count(*)::int from ${assets} where ${assets.projectId} = ${projects.id} and ${assets.deletedAt} is null)`,
+      okCount: sql<number>`(select count(*)::int from ${assets} where ${assets.projectId} = ${projects.id} and ${assets.deletedAt} is null and ${assets.flag} = 'pick')`,
       memberCount: sql<number>`(select count(*)::int from ${projectMembers} pm where pm.project_id = ${projects.id})`,
+      cutTotal: sql<number>`(select count(*)::int from ${cuts} c where c.project_id = ${projects.id})`,
+      cutDone: sql<number>`(select count(*)::int from ${cuts} c where c.project_id = ${projects.id} and c.status = 'done')`,
+      cutActive: sql<number>`(select count(*)::int from ${cuts} c where c.project_id = ${projects.id} and c.status in ('wip', 'review'))`,
     })
     .from(projects)
     .leftJoin(projectMembers, and(eq(projectMembers.projectId, projects.id), eq(projectMembers.userId, u.id)))
@@ -58,7 +62,9 @@ export async function listProjects(u: CurrentUser, opts: { archived?: boolean; q
     ownerName: r.ownerName,
     access: computeAccess(u, r.p, r.memberRole ?? null),
     assetCount: r.assetCount,
+    okCount: r.okCount,
     memberCount: r.memberCount,
+    cuts: { total: r.cutTotal, done: r.cutDone, active: r.cutActive },
     lastActivityAt: r.p.lastActivityAt.toISOString(),
     createdAt: r.p.createdAt.toISOString(),
     archivedAt: r.p.archivedAt?.toISOString() ?? null,

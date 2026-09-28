@@ -1,7 +1,7 @@
 "use client";
 
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookText, Clapperboard, FolderKanban, Languages, Megaphone, Minus, MonitorUp, Plus, Sparkles, Wand2 } from "lucide-react";
+import { BookText, Languages, Megaphone, Minus, MonitorUp, Plus, Sparkles, Wand2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 import { toast } from "sonner";
@@ -675,6 +675,46 @@ export function Studio({
                 </div>
               </div>
 
+              {/* 작업 위치: 프로젝트 / 컷 — 결과는 여기에 테이크로 쌓이고, 버전도 이 컷 안에서만 올라가요 */}
+              <div className="corners flex flex-wrap items-center gap-x-2 gap-y-2 rounded-2xl border border-line bg-white/[0.015] px-3 py-2.5">
+                <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-4">작업 위치</span>
+                <Select
+                  size="sm"
+                  value={projectId}
+                  onValueChange={setProjectId}
+                  options={projects.map((p) => ({ value: p.id, label: p.isPersonal ? `${p.name} (개인)` : p.name }))}
+                  className="min-w-0 max-w-[220px] flex-1 rounded-full border-transparent bg-transparent font-medium hover:bg-white/[0.04]"
+                />
+                <span className="text-fg-4">/</span>
+                <Select
+                  size="sm"
+                  value={cutId ?? "none"}
+                  onValueChange={(v) => setCutByProject((m) => ({ ...m, [projectId]: v }))}
+                  options={[
+                    { value: "none", label: "컷 없이 (프로젝트에 바로)" },
+                    ...cutOptions.map((c) => ({ value: c.id, label: c.title ? `${c.code} · ${c.title}` : c.code })),
+                  ]}
+                  className={cn("min-w-0 max-w-[220px] flex-1 rounded-full border-transparent bg-transparent font-mono hover:bg-white/[0.04]", cutId && "text-accent")}
+                />
+                <Tip content="다음 번호로 컷 만들기">
+                  <Button variant="ghost" size="icon-xs" onClick={() => void addCut()} aria-label="새 컷">
+                    <Plus />
+                  </Button>
+                </Tip>
+                <span className="ml-auto flex items-center gap-2 text-[11.5px] text-fg-4">
+                  {doc ? (
+                    <>
+                      <span className="rounded-full border border-accent/40 bg-accent/10 px-2 py-px font-mono text-[10.5px] text-accent">
+                        {docLabel} v{doc.baseVersion ?? doc.version}
+                      </span>
+                      <span className="hidden sm:inline">버전은 {docLabel} 안에서만 쌓여요</span>
+                    </>
+                  ) : (
+                    <span className="hidden sm:inline">생성하면 {docLabel}의 v1이 돼요</span>
+                  )}
+                </span>
+              </div>
+
               <ModelPicker models={models} value={model} status={status} onChange={(m) => setModelId(m.id)} />
               {st?.notes && (
                 <p className="-mt-1 flex gap-2 rounded-xl border border-info/25 bg-info/8 px-3 py-2 text-[12px] leading-relaxed text-fg-2">
@@ -745,39 +785,6 @@ export function Studio({
               <SettingsCard summary={settingsSummary}>
                 <ReferenceSlots slots={slots} value={inputs} onChange={setInputs} projectId={projectId} mentionStyle={mentionStyle} onInsertMention={insertAtCursor} />
                 <ParamControls model={model} params={params} onChange={(next) => setParamsByModel((p) => ({ ...p, [model.id]: next }))} />
-                <div className="flex flex-col gap-2">
-                  <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-fg-2">
-                    <FolderKanban className="size-3.5" /> 저장할 프로젝트
-                  </span>
-                  <Select
-                    value={projectId}
-                    onValueChange={setProjectId}
-                    options={projects.map((p) => ({ value: p.id, label: p.isPersonal ? `${p.name} (개인)` : p.name }))}
-                    className="w-full"
-                  />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-fg-2">
-                    <Clapperboard className="size-3.5" /> 컷
-                    <span className="font-normal text-fg-4">— 고르면 결과에 테이크 번호가 붙어요</span>
-                  </span>
-                  <div className="flex gap-2">
-                    <Select
-                      value={cutId ?? "none"}
-                      onValueChange={(v) => setCutByProject((m) => ({ ...m, [projectId]: v }))}
-                      options={[
-                        { value: "none", label: "컷 없이 (프로젝트에 바로)" },
-                        ...cutOptions.map((c) => ({ value: c.id, label: c.title ? `${c.code} · ${c.title}` : c.code })),
-                      ]}
-                      className="min-w-0 flex-1"
-                    />
-                    <Tip content="다음 번호로 컷 만들기">
-                      <Button variant="secondary" size="icon" onClick={() => void addCut()} aria-label="새 컷">
-                        <Plus />
-                      </Button>
-                    </Tip>
-                  </div>
-                </div>
                 {model.priceNote && <p className="text-[11px] leading-relaxed text-fg-4">{model.priceNote}</p>}
               </SettingsCard>
             </div>
@@ -887,6 +894,7 @@ export function Studio({
         open={libraryOpen}
         onOpenChange={setLibraryOpen}
         kind={kind}
+        context={{ projectId, cutId }}
         onUse={(p) => {
           if (prompt.trim() && p.prompt !== prompt) setPasteBase(prompt);
           setPrompt(p.prompt);
@@ -905,7 +913,15 @@ export function Studio({
         params={params}
         onSaved={() => setLoadedVersion(null)}
       />
-      <SaveToLibraryDialog open={librarySaveOpen} onOpenChange={setLibrarySaveOpen} text={prompt} kind={kind} modelId={model.id} params={params} />
+      <SaveToLibraryDialog
+        open={librarySaveOpen}
+        onOpenChange={setLibrarySaveOpen}
+        text={prompt}
+        kind={kind}
+        modelId={model.id}
+        params={params}
+        origin={{ projectId, cutId, label: `${currentProject?.name ?? "프로젝트"}${cutCode ? ` / ${cutCode}` : ""}` }}
+      />
       <ShareDialog
         open={!!sendPresetId}
         onOpenChange={(v) => !v && setSendPresetId(null)}

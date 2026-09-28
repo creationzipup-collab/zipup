@@ -49,6 +49,9 @@ try {
   const inbox = await member.api("/api/prompts?tab=inbox");
   const got = inbox.items.find((i) => i.id === sent.presetId);
   got ? ok(`inbox has it (unseen=${inbox.unseen}, message="${got.share?.message}", clip=${!!got.clip})`) : fail("not in member inbox");
+  // 같은 글을 예전에 보냈으면 처음 출처를 그대로 써요
+  if (got?.origin?.projectId) ok(`origin recorded: ${got.origin.projectName} / ${got.origin.cutCode ?? "컷 없음"}`);
+  else fail(`origin missing: ${JSON.stringify(got?.origin)}`);
   if (got && got.share?.seen) fail("should be unseen before opening");
 
   // 보낸 사람: 보낸 탭

@@ -10,9 +10,11 @@ import { toast } from "sonner";
 import { AssetBrowser } from "@/components/assets/asset-browser";
 import { MediaThumb } from "@/components/assets/media";
 import { VerdictBadge, VERDICT_STYLE } from "@/components/assets/selection-controls";
-import { RollingNumber } from "@/components/brand/motion";
+import { Ticker } from "@/components/brand/hud";
+import { CutTimeline } from "@/components/cuts/cut-timeline";
 import { useDirectory } from "@/components/projects/project-dialogs";
 import { Button } from "@/components/ui/button";
+import { Segmented } from "@/components/ui/controls";
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Popover, PopoverContent, PopoverTrigger } from "@/components/ui/menu";
 import { Avatar, TimeAgo } from "@/components/ui/misc";
 import { downloadZip } from "@/lib/client/assets";
@@ -89,6 +91,22 @@ export function CutBoardView({
     }
   }
 
+  // 목록 / 타임라인 (이 브라우저에 기억)
+  const [view, setViewRaw] = React.useState<"list" | "timeline">("list");
+  React.useEffect(() => {
+    try {
+      const v = localStorage.getItem("zipup:cuts:view");
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (v === "timeline") setViewRaw("timeline");
+    } catch {}
+  }, []);
+  const setView = (v: "list" | "timeline") => {
+    setViewRaw(v);
+    try {
+      localStorage.setItem("zipup:cuts:view", v);
+    } catch {}
+  };
+
   const current = openCut ? cuts.find((c) => c.id === openCut) : null;
   if (openCut && (current || openCut === "none")) {
     return <CutDetail projectId={projectId} projectName={projectName} cut={current ?? null} canEdit={canEdit} onBack={() => onOpenCut(null)} onChanged={refresh} />;
@@ -105,7 +123,17 @@ export function CutBoardView({
           <Stat label="KEEP" value={totals.keep} tone="text-warning" />
           <Stat label="NG" value={totals.ng} tone="text-danger" />
         </dl>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {cuts.length > 0 && (
+            <Segmented
+              value={view}
+              onChange={setView}
+              options={[
+                { value: "list", label: "목록" },
+                { value: "timeline", label: "타임라인" },
+              ]}
+            />
+          )}
           <ExportMenu projectId={projectId} cutId={null} label="프로젝트 내보내기" />
           {canEdit && <AddCuts existing={cuts.map((c) => c.code)} onAdd={add} />}
         </div>
@@ -140,12 +168,14 @@ export function CutBoardView({
             </div>
           )}
 
-          {cuts.length > 0 && (
+          {cuts.length > 0 && view === "timeline" && <CutTimeline cuts={ordered} onOpen={(id) => onOpenCut(id)} />}
+
+          {cuts.length > 0 && view === "list" && (
             <Reorder.Group
               axis="y"
               values={ordered.map((c) => c.id)}
               onReorder={(ids) => setOrder(ids)}
-              className="flex flex-col gap-2"
+              className="flex flex-col border-t border-line"
             >
               {ordered.map((c, i) => (
                 <CutRow
@@ -167,7 +197,7 @@ export function CutBoardView({
             <button
               type="button"
               onClick={() => onOpenCut("none")}
-              className="group grid grid-cols-[76px_1fr_auto] items-center gap-4 rounded-xl border border-line px-4 py-3 text-left transition hover:border-line-2 hover:bg-panel-2/40"
+              className="corners corners-dashed group grid grid-cols-[76px_1fr_auto] items-center gap-4 rounded-xl px-4 py-3 text-left transition hover:bg-white/[0.02]"
             >
               <span className="font-mono text-[12px] tracking-[0.12em] text-fg-4">—</span>
               <span className="min-w-0">
@@ -187,8 +217,8 @@ function Stat({ label, value, sub, tone }: { label: string; value: number; sub?:
   return (
     <div className="flex flex-col gap-1">
       <dt className="text-[11.5px] text-fg-3">{label}</dt>
-      <dd className={cn("font-display text-[30px] font-light leading-none tracking-[-0.02em]", tone)}>
-        <RollingNumber value={value} />
+      <dd className={cn("num text-[40px]", tone)}>
+        <Ticker value={value} />
       </dd>
       {sub && <dd className="font-mono text-[10.5px] text-fg-4">{sub}</dd>}
     </div>
@@ -209,13 +239,19 @@ function CutRow({ cut, index, canEdit, onOpen, onChanged, onDragEnd }: { cut: Cu
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: Math.min(index, 12) * 0.03, ease: [0.2, 0.8, 0.2, 1] }}
-      whileDrag={{ scale: 1.01, boxShadow: "0 24px 60px -24px rgba(0,0,0,0.6)" }}
+      whileDrag={{ scale: 1.01, boxShadow: "0 24px 60px -24px rgba(0,0,0,0.6)", backgroundColor: "rgb(14 19 24)" }}
       className={cn(
-        "group relative grid grid-cols-[76px_1fr] items-center gap-4 rounded-xl border bg-panel px-4 py-3 transition-colors md:grid-cols-[76px_128px_minmax(0,1fr)_auto]",
-        live ? "border-accent/40" : "border-line hover:border-line-2",
+        "group relative grid grid-cols-[76px_1fr] items-center gap-4 border-b border-line px-3 py-3 transition-colors hover:bg-white/[0.02] md:grid-cols-[76px_128px_minmax(0,1fr)_auto]",
+        live && "bg-accent/[0.03]",
       )}
     >
-      {live && <span aria-hidden className="pointer-events-none absolute inset-y-3 left-0 w-[2px] rounded-full bg-accent shadow-[0_0_12px_var(--accent)]" />}
+      <span
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute inset-y-2 left-0 w-px origin-center bg-accent shadow-[0_0_10px_var(--accent-glow)] transition-transform duration-300",
+          live ? "scale-y-100" : "scale-y-0 group-hover:scale-y-100",
+        )}
+      />
       {/* 번호 */}
       <div className="flex items-center gap-1.5">
         {canEdit && (
@@ -228,13 +264,13 @@ function CutRow({ cut, index, canEdit, onOpen, onChanged, onDragEnd }: { cut: Cu
             <GripVertical className="size-3.5" />
           </button>
         )}
-        <button type="button" onClick={onOpen} className="text-left font-mono text-[15px] font-semibold tracking-[0.04em] hover:text-accent">
+        <button type="button" onClick={onOpen} className="text-left font-mono text-[15px] tracking-[0.03em] transition hover:text-accent">
           {cut.code}
         </button>
       </div>
 
       {/* 대표 */}
-      <button type="button" onClick={onOpen} className="relative hidden aspect-video overflow-hidden rounded-lg bg-panel-3 md:block" aria-label={`${cut.code} 열기`}>
+      <button type="button" onClick={onOpen} className="relative hidden aspect-video overflow-hidden rounded-lg bg-panel-3 ring-1 ring-white/[0.06] md:block" aria-label={`${cut.code} 열기`}>
         {cut.cover ? (
           <MediaThumb kind={cut.cover.kind} thumb={cut.cover.urls.thumb} src={cut.cover.urls.src} durationSec={null} autoPlayOnHover={false} className="transition duration-500 group-hover:scale-[1.04]" />
         ) : (
@@ -293,7 +329,7 @@ function TakeStrip({ takes, onClick }: { takes: CutTake[]; onClick?: () => void 
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: i * 0.025 }}
-          className="relative block h-9 w-12 overflow-hidden rounded-[5px] bg-panel-3"
+          className="relative block h-9 w-12 overflow-hidden rounded-[5px] bg-panel-3 ring-1 ring-white/[0.06]"
           title={`${t.take ? `T${String(t.take).padStart(2, "0")}` : ""} · ${t.userName}`}
         >
           {t.kind === "image" ? (
@@ -302,7 +338,7 @@ function TakeStrip({ takes, onClick }: { takes: CutTake[]; onClick?: () => void 
           ) : (
             <span className="absolute inset-0 flex items-center justify-center bg-panel-3 font-mono text-[9px] text-fg-3">MOV</span>
           )}
-          {t.flag && <span className={cn("absolute inset-x-0 bottom-0 h-[3px]", VERDICT_STYLE[t.flag].solid)} />}
+          {t.flag && <span className={cn("absolute inset-x-0 bottom-0 h-[2px]", VERDICT_STYLE[t.flag].solid)} />}
         </motion.span>
       ))}
     </div>
@@ -317,7 +353,12 @@ async function patchCut(id: string, body: Record<string, unknown>) {
 
 function StatusPicker({ cut, canEdit, onChanged }: { cut: CutDTO; canEdit: boolean; onChanged: () => void }) {
   const pill = (
-    <span className="inline-flex h-6 items-center gap-1.5 rounded-full border border-line-2 px-2 text-[11.5px] text-fg-2">
+    <span
+      className={cn(
+        "inline-flex h-6 items-center gap-1.5 rounded-full border px-2 text-[11.5px]",
+        cut.status === "wip" ? "border-accent/40 bg-accent/10 text-accent" : cut.status === "review" ? "border-info/40 bg-info/10 text-info" : cut.status === "done" ? "border-success/35 bg-success/10 text-success" : "border-line-2 text-fg-2",
+      )}
+    >
       <span className={cn("size-1.5 rounded-full", STATUS_DOT[cut.status], cut.status === "wip" && "animate-pulse-dot")} />
       {CUT_STATUS_LABEL[cut.status]}
       {canEdit && <ChevronDown className="size-3 text-fg-4" />}

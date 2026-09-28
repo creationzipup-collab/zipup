@@ -99,7 +99,7 @@ export function MentionPanel({
           <div className="flex items-center gap-2 px-1 text-[11.5px] text-fg-4">
             <span>프롬프트 속 언급 {groups.length}개</span>
             {issues > 0 ? <span className="text-warning">· 확인 필요 {issues}개</span> : <span className="text-success">· 모두 연결됨</span>}
-            <span className="ml-auto">언급 → 레퍼런스 → 정리 후 모습</span>
+            <span className="ml-auto">언급(눌러서 번호 바꾸기) → 가리키는 레퍼런스 → 정리 후</span>
           </div>
           <ol className="flex flex-col gap-1">
             <AnimatePresence initial={false}>
@@ -183,7 +183,7 @@ function GroupRow({
           group.status === "missing" ? "border-danger/30 bg-danger/[0.04]" : group.status === "linked" || group.status === "guessed" ? "border-line" : "border-warning/30 bg-warning/[0.04]",
         )}
       >
-        {/* 언급 */}
+        {/* 언급: 눌러서 다른 번호로 바꾸기 (@img8 → @img3) */}
         <div className="flex min-w-0 items-center gap-1.5">
           {renaming ? (
             <form
@@ -204,13 +204,47 @@ function GroupRow({
             </form>
           ) : (
             <>
-              <button type="button" onClick={onFocus} className="truncate rounded-md bg-panel-3 px-1.5 py-0.5 font-mono text-[12.5px] text-fg transition hover:bg-accent/20" title="프롬프트에서 위치 보기">
-                {group.label}
-              </button>
+              <Menu>
+                <MenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex min-w-0 items-center gap-1 rounded-md border border-line-2 bg-white/[0.04] py-0.5 pl-1.5 pr-1 font-mono text-[12.5px] text-fg transition hover:border-accent/50"
+                    title="다른 번호·이름으로 바꾸기"
+                  >
+                    <span className="truncate">{group.label}</span>
+                    <ChevronDown className="size-3 shrink-0 text-fg-4" />
+                  </button>
+                </MenuTrigger>
+                <MenuContent align="start" className="w-72">
+                  <MenuLabel>
+                    {group.label} 바꾸기{group.mentions.length > 1 ? ` · ${group.mentions.length}곳 모두` : ""}
+                  </MenuLabel>
+                  {refs.map((r) => {
+                    const own = sameStyle(group.label, r);
+                    return (
+                      <MenuItem key={r.id} disabled={own === group.label} onSelect={() => onRename(own)}>
+                        <Thumb r={r} className="size-7" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block font-mono text-[12.5px]">{own}</span>
+                          <span className="block truncate text-[11px] text-fg-4">
+                            {KIND_KO[r.kind]} {r.order} · {r.filename}
+                          </span>
+                        </span>
+                        {r.id === group.refId && <Check className="size-3.5 text-accent" />}
+                      </MenuItem>
+                    );
+                  })}
+                  {!refs.length && <div className="px-2 py-2 text-[12px] text-fg-4">붙인 레퍼런스가 없어요</div>}
+                  <MenuSeparator />
+                  <MenuItem onSelect={() => setRenaming(true)}>
+                    <Pencil /> 직접 입력해서 바꾸기
+                  </MenuItem>
+                  <MenuItem onSelect={onFocus}>
+                    <AtSign /> 프롬프트에서 위치 보기
+                  </MenuItem>
+                </MenuContent>
+              </Menu>
               {group.mentions.length > 1 && <span className="shrink-0 font-mono text-[10.5px] text-fg-4">×{group.mentions.length}</span>}
-              <button type="button" onClick={() => setRenaming(true)} className="shrink-0 rounded p-0.5 text-fg-4 opacity-60 transition hover:text-fg-2 hover:opacity-100" aria-label="이 언급 모두 바꾸기">
-                <Pencil className="size-3" />
-              </button>
             </>
           )}
         </div>
@@ -264,6 +298,15 @@ function GroupRow({
       {(group.status === "missing" || group.status === "guessed") && <p className="px-3 pt-0.5 text-[11px] text-fg-4">{group.reason}</p>}
     </motion.li>
   );
+}
+
+/**
+ * 지금 쓰는 표기 그대로 번호만 바꾸기: @img8 → @img3, [Image 2] → [Image 3], @jacket → (모델 형식 없이) @img3
+ */
+function sameStyle(label: string, r: MentionRef): string {
+  const m = label.match(/^(.*?)(\d+)(\W*)$/u);
+  if (m && m[1]) return `${m[1]}${r.order}${m[3]}`;
+  return `@${r.kind === "video" ? "vid" : r.kind === "audio" ? "audio" : "img"}${r.order}`;
 }
 
 function Thumb({ r, className }: { r: MentionRef; className?: string }) {

@@ -19,17 +19,17 @@ try {
   await go("/settings");
   await shot("30-settings", true);
   await go("/prompts");
-  await page.getByRole("button", { name: /글로 올리기/ }).first().click();
+  await page.getByRole("button", { name: /새 프롬프트/ }).first().click();
   await page.waitForTimeout(300);
   await page.getByPlaceholder("예: 제품 누끼 · 스튜디오 조명").fill("제품 누끼 · 스튜디오 조명");
-  await page.locator("textarea").first().fill("white seamless studio backdrop, softbox key light from left, product hero shot, crisp reflections, 85mm");
+  await page.locator("[role=dialog] textarea").first().fill("white seamless studio backdrop, softbox key light from left, product hero shot, crisp reflections, 85mm");
   await page.getByPlaceholder("광고, 제품, 시네마틱").fill("제품, 광고, 누끼");
   await shot("31-prompt-editor");
-  await page.getByRole("button", { name: "올리기", exact: true }).click();
-  await page.waitForTimeout(1200);
+  await page.getByRole("button", { name: "저장", exact: true }).click();
+  await page.waitForTimeout(1500);
   await shot("32-prompts");
-  // 스튜디오에서 사용
-  await page.locator("a[href*='preset=']").first().click();
+  // 스튜디오에서 쓰기 (오른쪽 패널)
+  await page.getByRole("button", { name: /스튜디오에서 쓰기|이미지로 쓰기/ }).first().click();
   await page.waitForURL(/\/create\/image\?preset=/, { timeout: 20000 });
   await page.waitForLoadState("networkidle");
   await page.waitForTimeout(1200);

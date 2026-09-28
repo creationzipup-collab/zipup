@@ -29,7 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/controls";
 import { Dialog, DialogBody, DialogContent, DialogFooter } from "@/components/ui/dialog";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, Tip } from "@/components/ui/menu";
-import { EmptyState, TimeAgo } from "@/components/ui/misc";
+import { TimeAgo } from "@/components/ui/misc";
 import { downloadUrl, downloadZip, useAssetMutations } from "@/lib/client/assets";
 import { useNow } from "@/lib/client/use-now";
 import { cancelGenerationRequest, isActive, usePushGenerations, type GenerationDTO } from "@/lib/client/generations";
@@ -119,13 +119,11 @@ export function ResultsFeed({
 
   if (!batches.length) {
     return (
-      <div className="flex h-full min-h-[60vh] flex-col items-center justify-center gap-2">
-        <Slate director={director} className="animate-fade-up" />
-        <EmptyState
-          className="pt-6"
-          title={kind === "image" ? "첫 이미지를 만들어 보세요" : "첫 영상을 만들어 보세요"}
-          description="왼쪽에서 모델과 프롬프트를 정하고 생성하기를 누르면 결과가 여기에 쌓여요. 이미지를 드래그하거나 붙여넣으면 레퍼런스로 들어가요."
-        />
+      <div className="flex h-full min-h-[60vh] flex-col items-center justify-center gap-6">
+        <Slate director={director} label={kind === "image" ? "Image Studio" : "Video Studio"} className="animate-fade-up" />
+        <p className="max-w-[340px] text-center text-[12.5px] leading-relaxed text-fg-4">
+          아직 테이크가 없어요. 생성하면 여기부터 쌓여요. 이미지를 끌어오거나 붙여넣으면 레퍼런스로 들어가요.
+        </p>
       </div>
     );
   }

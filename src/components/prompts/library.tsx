@@ -15,6 +15,7 @@ import { ShareDialog } from "@/components/prompts/share-dialog";
 import { useShellMaybe } from "@/components/shell/app-shell";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
+import { Select } from "@/components/ui/controls";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Avatar, TimeAgo } from "@/components/ui/misc";
 import { getModel } from "@/lib/models/registry";
@@ -62,6 +63,7 @@ export function PromptLibrary({
   isAdmin = false,
   className,
   toolbarEnd,
+  context,
 }: {
   mode?: "page" | "picker";
   kind?: "image" | "video";
@@ -71,6 +73,8 @@ export function PromptLibrary({
   isAdmin?: boolean;
   className?: string;
   toolbarEnd?: React.ReactNode;
+  /** 스튜디오에서 열 때 지금 프로젝트·컷 (그 묶음을 맨 위로) */
+  context?: { projectId: string; cutId: string | null } | null;
 }) {
   const qc = useQueryClient();
   const router = useRouter();
@@ -78,7 +82,18 @@ export function PromptLibrary({
   const [q, setQ] = React.useState("");
   const dq = React.useDeferredValue(q.trim());
   const { data, isLoading, isFetching } = usePromptLibrary({ tab, q: dq, kind });
-  const items = React.useMemo(() => data?.items ?? [], [data]);
+  const all = React.useMemo(() => data?.items ?? [], [data]);
+  // 출처(프로젝트 / 컷)로 거르기와 묶기
+  const [origin, setOrigin] = React.useState("all");
+  const tree = React.useMemo(() => buildTree(all), [all]);
+  const items = React.useMemo(() => all.filter((i) => matchOrigin(i, origin)), [all, origin]);
+  const groups = React.useMemo(() => {
+    const list = groupByOrigin(items);
+    if (!context) return list;
+    // 스튜디오에서 열면 지금 컷 → 같은 프로젝트 → 나머지 순서
+    const rank = (key: string) => (key === `${context.projectId}|${context.cutId ?? ""}` ? 0 : key.startsWith(`${context.projectId}|`) ? 1 : 2);
+    return [...list].sort((a, b) => rank(a.key) - rank(b.key));
+  }, [items, context]);
   const [selectedId, setSelectedId] = React.useState<string | null>(initialOpen);
   const selected = items.find((i) => i.id === selectedId) ?? null;
   const [sendFor, setSendFor] = React.useState<LibraryItem | null>(null);
@@ -88,7 +103,7 @@ export function PromptLibrary({
   const [autoPicked, setAutoPicked] = React.useState(false);
   if (!autoPicked && data && !isFetching) {
     setAutoPicked(true);
-    if (!items.some((i) => i.id === selectedId) && mode === "page" && typeof window !== "undefined" && window.innerWidth >= 1024) setSelectedId(items[0]?.id ?? null);
+    if (!items.some((i) => i.id === selectedId) && mode === "page" && typeof window !== "undefined" && window.innerWidth >= 1024) setSelectedId(groups[0]?.items[0]?.id ?? null);
   }
 
   const refresh = () => void qc.invalidateQueries({ queryKey: ["prompt-library"] });
@@ -140,6 +155,7 @@ export function PromptLibrary({
                     setTab(t.value);
                     setSelectedId(null);
                     setAutoPicked(false);
+                    setOrigin("all");
                   }}
                   className={cn(
                     "relative flex h-11 items-center gap-1.5 px-3.5 text-[13.5px] transition-colors",
@@ -162,8 +178,48 @@ export function PromptLibrary({
               className="h-8 w-full rounded-full border border-line-2 bg-white/[0.03] pl-8 pr-3 text-[13px] outline-none transition placeholder:text-fg-4 focus:border-accent/60"
             />
           </div>
+          {(tree.projects.length > 0 || tree.none > 0) && (
+            <div className={cn("pb-2 sm:pb-0", mode === "page" && "xl:hidden")}>
+              <Select
+                size="sm"
+                value={origin}
+                onValueChange={setOrigin}
+                options={[
+                  { value: "all", label: `출처: 전체 (${tree.total})` },
+                  ...tree.projects.flatMap((p) => [
+                    { value: `p:${p.id}`, label: `${p.label} (${p.count})` },
+                    ...p.cuts.map((c) => ({ value: `c:${c.key}`, label: `  └ ${c.code} (${c.count})` })),
+                  ]),
+                  ...(tree.none ? [{ value: "none", label: `출처 없음 (${tree.none})` }] : []),
+                ]}
+                className="max-w-[240px] rounded-full"
+              />
+            </div>
+          )}
           {toolbarEnd}
         </div>
+
+        <div className="flex min-h-0 flex-1">
+          {/* 출처: 프로젝트 → 컷 */}
+          {mode === "page" && (tree.projects.length > 0 || tree.none > 0) && (
+            <nav className="hidden w-[210px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-line py-3 pr-2 scrollbar-thin xl:flex">
+              <span className="px-2 pb-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-fg-4">출처 · 프로젝트 / 컷</span>
+              <OriginItem active={origin === "all"} onClick={() => setOrigin("all")} label="전체" count={tree.total} />
+              {tree.projects.map((p) => (
+                <div key={p.id} className="mt-1.5 flex flex-col gap-0.5">
+                  <OriginItem active={origin === `p:${p.id}`} onClick={() => setOrigin(`p:${p.id}`)} label={p.label} count={p.count} strong />
+                  {p.cuts.map((c) => (
+                    <OriginItem key={c.key} active={origin === `c:${c.key}`} onClick={() => setOrigin(`c:${c.key}`)} label={c.code} count={c.count} mono indent />
+                  ))}
+                </div>
+              ))}
+              {tree.none > 0 && (
+                <div className="mt-1.5">
+                  <OriginItem active={origin === "none"} onClick={() => setOrigin("none")} label="출처 없음" count={tree.none} muted />
+                </div>
+              )}
+            </nav>
+          )}
 
         <div className="min-h-0 flex-1 overflow-y-auto py-2 pr-1 scrollbar-thin">
           {isLoading ? (
@@ -179,14 +235,27 @@ export function PromptLibrary({
               <p className="mt-1 max-w-sm text-[12px] text-fg-4">{dq ? "다른 단어로 찾아보세요. 태그도 함께 검색돼요." : EMPTY[tab].body}</p>
             </div>
           ) : (
-            <ul className="flex flex-col gap-1 p-1">
-              {items.map((item, i) => (
-                <motion.li key={`${tab}-${item.id}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: Math.min(i, 10) * 0.025 }}>
-                  <ItemRow item={item} tab={tab} selected={item.id === selectedId} onSelect={() => setSelectedId(item.id)} />
-                </motion.li>
+            <div className="flex flex-col gap-3">
+              {groups.map((g) => (
+                <section key={g.key}>
+                  <header className="sticky top-0 z-10 flex items-center gap-2 bg-[rgb(6_8_11/0.92)] px-3 py-1.5 backdrop-blur">
+                    <span className={cn("size-1.5 rounded-full", g.key === "none" ? "bg-fg-4" : "bg-accent/80")} />
+                    <span className="truncate font-mono text-[11.5px] tracking-[0.02em] text-fg-2">{g.label}</span>
+                    <span className="font-mono text-[10.5px] text-fg-4">{g.items.length}</span>
+                    <span aria-hidden className="h-px flex-1 bg-gradient-to-r from-line to-transparent" />
+                  </header>
+                  <ul className="flex flex-col gap-1 p-1">
+                    {g.items.map((item, i) => (
+                      <motion.li key={`${tab}-${item.id}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: Math.min(i, 10) * 0.025 }}>
+                        <ItemRow item={item} tab={tab} selected={item.id === selectedId} onSelect={() => setSelectedId(item.id)} />
+                      </motion.li>
+                    ))}
+                  </ul>
+                </section>
               ))}
-            </ul>
+            </div>
           )}
+        </div>
         </div>
       </div>
 
@@ -225,6 +294,102 @@ export function PromptLibrary({
       />
       {confirmDialog}
     </div>
+  );
+}
+
+/* ---------------------------------------------------------------------------------------------- */
+/*                                   출처: 프로젝트 / 컷으로 묶기                                      */
+/* ---------------------------------------------------------------------------------------------- */
+
+type Origin = LibraryItem["origin"];
+
+const originKey = (o: Origin) => (o ? `${o.projectId}|${o.cutId ?? ""}` : "none");
+const projectLabel = (o: NonNullable<Origin>) => (o.personal ? "개인 작업공간" : o.projectName || "프로젝트");
+export const originLabel = (o: Origin) => (o ? `${projectLabel(o)} / ${o.cutCode ?? "컷 없음"}` : "출처 없음");
+
+type OriginTree = {
+  total: number;
+  none: number;
+  projects: { id: string; label: string; count: number; cuts: { key: string; code: string; count: number }[] }[];
+};
+
+function buildTree(items: LibraryItem[]): OriginTree {
+  const projects = new Map<string, OriginTree["projects"][number]>();
+  let none = 0;
+  for (const it of items) {
+    const o = it.origin;
+    if (!o) {
+      none++;
+      continue;
+    }
+    const p = projects.get(o.projectId) ?? { id: o.projectId, label: projectLabel(o), count: 0, cuts: [] };
+    p.count++;
+    const key = originKey(o);
+    const c = p.cuts.find((x) => x.key === key);
+    if (c) c.count++;
+    else p.cuts.push({ key, code: o.cutCode ?? "컷 없음", count: 1 });
+    projects.set(o.projectId, p);
+  }
+  for (const p of projects.values()) p.cuts.sort((a, b) => a.code.localeCompare(b.code, "en", { numeric: true }));
+  return { total: items.length, none, projects: [...projects.values()] };
+}
+
+function matchOrigin(i: LibraryItem, f: string): boolean {
+  if (f === "all") return true;
+  if (f === "none") return !i.origin;
+  if (f.startsWith("p:")) return i.origin?.projectId === f.slice(2);
+  if (f.startsWith("c:")) return originKey(i.origin) === f.slice(2);
+  return true;
+}
+
+/** 최근 것이 먼저인 순서를 지키며 출처별로 묶기 */
+function groupByOrigin(items: LibraryItem[]) {
+  const map = new Map<string, { key: string; label: string; items: LibraryItem[] }>();
+  for (const it of items) {
+    const key = originKey(it.origin);
+    const g = map.get(key) ?? { key, label: originLabel(it.origin), items: [] };
+    g.items.push(it);
+    map.set(key, g);
+  }
+  return [...map.values()];
+}
+
+function OriginItem({
+  active,
+  onClick,
+  label,
+  count,
+  strong,
+  mono,
+  indent,
+  muted,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  count: number;
+  strong?: boolean;
+  mono?: boolean;
+  indent?: boolean;
+  muted?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "relative flex h-7 items-center gap-2 rounded-lg pr-2 text-left text-[12.5px] transition",
+        indent ? "pl-6" : "pl-2",
+        active ? "bg-white/[0.06] text-fg" : muted ? "text-fg-4 hover:text-fg-2" : "text-fg-3 hover:bg-white/[0.03] hover:text-fg",
+        strong && "font-medium",
+        mono && "font-mono text-[12px]",
+      )}
+    >
+      {active && <span aria-hidden className="absolute inset-y-1.5 left-0 w-px bg-accent shadow-[0_0_8px_var(--accent-glow)]" />}
+      {indent && <span aria-hidden className="absolute left-3 top-0 h-full w-px bg-line" />}
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <span className="font-mono text-[10.5px] text-fg-4">{count}</span>
+    </button>
   );
 }
 
@@ -365,6 +530,16 @@ function Inspector({
           </div>
 
           <div>
+            <p className="mb-1.5 flex items-center gap-2 font-mono text-[11px] text-fg-3">
+              <span className="text-[10px] uppercase tracking-[0.18em] text-fg-4">출처</span>
+              {item.origin ? (
+                <Link href={`/projects/${item.origin.projectId}${item.origin.cutId ? `?tab=cuts&cut=${item.origin.cutId}` : ""}`} className="truncate text-fg-2 hover:text-accent">
+                  {originLabel(item.origin)}
+                </Link>
+              ) : (
+                <span className="text-fg-4">없음</span>
+              )}
+            </p>
             <h2 className="text-[20px] font-medium leading-snug tracking-[-0.02em]">{item.title}</h2>
             <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-fg-3">
               {item.share ? (

@@ -45,6 +45,11 @@ export type CutDTO = {
   /** 지금 이 컷에서 생성 중인 사람 */
   active: { id: string; name: string }[];
   lastActivityAt: string;
+  createdAt: string;
+  /** 첫 테이크 ~ 마지막 테이크 (타임라인 막대) */
+  span: { from: string; to: string } | null;
+  /** OK 테이크가 나온 때 (타임라인 표시, 최대 24개) */
+  okAt: string[];
 };
 
 export type CutBoard = {
@@ -108,11 +113,15 @@ export async function cutBoard(u: CurrentUser, projectId: string): Promise<CutBo
       ok: sql<number>`count(*) filter (where ${assets.flag} = 'pick')::int`,
       ng: sql<number>`count(*) filter (where ${assets.flag} = 'reject')::int`,
       keep: sql<number>`count(*) filter (where ${assets.flag} = 'keep')::int`,
+      first: sql<string>`to_char(min(${assets.createdAt}) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
+      last: sql<string>`to_char(max(${assets.createdAt}) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
+      okAt: sql<string[] | null>`(array_agg(to_char(${assets.createdAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') order by ${assets.createdAt}) filter (where ${assets.flag} = 'pick'))[1:24]`,
     })
     .from(assets)
     .where(live)
     .groupBy(assets.cutId);
   const counts = new Map(countRows.map((r) => [r.cutId ?? "", { takes: r.takes, ok: r.ok, ng: r.ng, keep: r.keep }]));
+  const spans = new Map(countRows.map((r) => [r.cutId ?? "", r]));
 
   // 컷마다 최근 테이크 몇 개 (컷 없는 클립 포함)
   const ranked = db.$with("ranked").as(
@@ -186,6 +195,9 @@ export async function cutBoard(u: CurrentUser, projectId: string): Promise<CutBo
         recent,
         active: activeRows.filter((a) => a.cutId === c.id).map((a) => ({ id: a.id, name: a.name })),
         lastActivityAt: c.lastActivityAt.toISOString(),
+        createdAt: c.createdAt.toISOString(),
+        span: spans.get(c.id)?.first ? { from: spans.get(c.id)!.first, to: spans.get(c.id)!.last } : null,
+        okAt: spans.get(c.id)?.okAt ?? [],
       };
     }),
     loose: { counts: counts.get("") ?? EMPTY, recent: recentBy.get("") ?? [] },

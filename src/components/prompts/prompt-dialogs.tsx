@@ -14,11 +14,14 @@ export function PromptLibraryDialog({
   onOpenChange,
   kind,
   onUse,
+  context,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   kind: "image" | "video";
   onUse: (p: LibraryItem) => void;
+  /** 지금 프로젝트·컷 — 그 묶음이 맨 위에 와요 */
+  context?: { projectId: string; cutId: string | null } | null;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -27,6 +30,7 @@ export function PromptLibraryDialog({
           <PromptLibrary
             mode="picker"
             kind={kind}
+            context={context}
             className="h-[min(72vh,760px)] px-4 pt-2"
             onUse={(p) => {
               onUse(p);

@@ -129,38 +129,32 @@ export function ProjectView({
               <MediaThumb kind={cover.kind} thumb={cover.urls.thumb} src={cover.urls.src} autoPlayOnHover={false} />
             </div>
           ) : (
-            <div className="absolute inset-0" style={{ background: `radial-gradient(80% 120% at 10% 0%, ${p.isPersonal ? "#666" : p.color ?? "#ff5b24"}40, transparent 60%)` }} />
+            <div className="absolute inset-0" style={{ background: `radial-gradient(80% 120% at 10% 0%, color-mix(in oklab, ${p.isPersonal ? "#666" : (p.color ?? "var(--accent)")} 26%, transparent), transparent 60%)` }} />
           )}
-          <div className="absolute inset-0 bg-gradient-to-b from-bg/30 via-bg/70 to-bg" />
+          <div className="absolute inset-0 bg-gradient-to-b from-bg/30 via-bg/75 to-bg" />
         </div>
         <div className="relative mx-auto flex w-full max-w-[1800px] flex-col gap-5 px-4 pb-6 pt-6 sm:px-8">
-          <Link href="/projects" className="flex w-fit items-center gap-1.5 text-[12.5px] text-fg-3 hover:text-fg">
-            <ArrowLeft className="size-3.5" /> 프로젝트
+          <Link href="/projects" className="flex w-fit items-center gap-1.5 font-mono text-[10.5px] uppercase tracking-[0.18em] text-fg-3 hover:text-fg">
+            <ArrowLeft className="size-3.5" /> Projects
           </Link>
           <div className="flex flex-wrap items-end gap-5">
-            <div className="relative size-20 shrink-0 overflow-hidden rounded-2xl border border-line-2 bg-panel-2 shadow-[var(--shadow-soft)]">
-              {cover ? (
-                <MediaThumb kind={cover.kind} thumb={cover.urls.thumb} src={cover.urls.src} autoPlayOnHover={false} />
-              ) : (
-                <div className="absolute inset-0" style={{ background: `linear-gradient(135deg, ${p.color ?? "#ff5b24"}, transparent)` }} />
-              )}
-            </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-[28px] font-semibold tracking-[-0.03em]">{p.name}</h1>
-                <span className="inline-flex items-center gap-1 rounded-md border border-line-2 bg-panel/60 px-2 py-0.5 text-[11.5px] text-fg-2">
+                <span className="size-2 shrink-0 rounded-full" style={{ background: p.isPersonal ? "var(--fg-3)" : (p.color ?? "var(--accent)") }} />
+                <h1 className="text-[30px] font-medium tracking-[-0.03em]">{p.name}</h1>
+                <span className="inline-flex items-center gap-1 rounded-full border border-line-2 px-2.5 py-0.5 text-[11.5px] text-fg-2">
                   <Vis className="size-3" /> {p.isPersonal ? "개인 작업공간" : VISIBILITY_LABEL[p.visibility]}
                 </span>
-                {data.teamName && <span className="rounded-md bg-panel-3 px-2 py-0.5 text-[11.5px] text-fg-3">{data.teamName}</span>}
-                {p.archivedAt && <span className="rounded-md bg-warning/15 px-2 py-0.5 text-[11.5px] text-warning">보관됨</span>}
+                {data.teamName && <span className="rounded-full border border-line-2 px-2.5 py-0.5 text-[11.5px] text-fg-3">{data.teamName}</span>}
+                {p.archivedAt && <span className="rounded-full border border-warning/35 bg-warning/10 px-2.5 py-0.5 text-[11.5px] text-warning">보관됨</span>}
               </div>
               <p className="mt-1.5 max-w-2xl text-[13.5px] text-fg-3">{p.description || `${data.ownerName}님의 프로젝트`}</p>
-              <div className="mt-3 flex flex-wrap gap-4 font-mono text-[12px] text-fg-3">
-                <span>전체 {data.stats.total}</span>
-                <span>이미지 {data.stats.images}</span>
-                <span>영상 {data.stats.videos}</span>
+              <div className="mt-3 flex flex-wrap gap-4 font-mono text-[11.5px] text-fg-3">
+                <span>TAKES {data.stats.total}</span>
+                <span>IMG {data.stats.images}</span>
+                <span>VID {data.stats.videos}</span>
                 <span className="text-success">OK {data.stats.picks}</span>
-                <span className="font-sans">
+                <span className="font-sans text-fg-4">
                   최근 활동 <TimeAgo date={p.lastActivityAt} />
                 </span>
               </div>

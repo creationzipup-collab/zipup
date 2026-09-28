@@ -116,6 +116,7 @@ export function SaveToLibraryDialog({
   modelId,
   params,
   defaultTitle,
+  origin,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -124,6 +125,8 @@ export function SaveToLibraryDialog({
   modelId: string;
   params: Record<string, unknown>;
   defaultTitle?: string;
+  /** 나온 곳 — 라이브러리에서 프로젝트·컷별로 묶어 보여요 */
+  origin?: { projectId: string; cutId: string | null; label: string } | null;
 }) {
   const qc = useQueryClient();
   const [title, setTitle] = React.useState("");
@@ -157,6 +160,8 @@ export function SaveToLibraryDialog({
             .map((t) => t.replace(/^#/, "").trim())
             .filter(Boolean)
             .slice(0, 10),
+          projectId: origin?.projectId ?? null,
+          cutId: origin?.cutId ?? null,
         }),
       });
       toast.success(`‘${r.item.title}’을(를) 라이브러리에 저장했어요.`, {
@@ -176,6 +181,13 @@ export function SaveToLibraryDialog({
       <DialogContent size="sm" title="라이브러리에 저장" description="라이브러리 ‘저장’에 들어가요. 다른 컷에서 꺼내 쓰거나 동료에게 보낼 수 있어요.">
         <form onSubmit={save}>
           <DialogBody className="flex flex-col gap-4">
+            {origin && (
+              <p className="flex items-center gap-2 rounded-lg border border-line bg-white/[0.02] px-3 py-2 text-[12px] text-fg-3">
+                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-fg-4">출처</span>
+                <span className="font-mono text-fg-2">{origin.label}</span>
+                <span className="ml-auto text-fg-4">라이브러리에서 이 이름으로 묶여요</span>
+              </p>
+            )}
             <Field label="제목">
               <Input autoFocus value={title} maxLength={80} onChange={(e) => setTitle(e.target.value)} placeholder="예: 제품 누끼 · 스튜디오 조명" />
             </Field>

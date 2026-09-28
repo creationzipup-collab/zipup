@@ -32,31 +32,29 @@ export default async function AdminHome() {
     <div className="flex flex-col gap-6">
       <div className="grid gap-3 lg:grid-cols-3">
         {pending > 0 ? (
-          <Link href="/admin/users?status=pending" className="group flex items-center gap-4 rounded-2xl border border-accent/30 bg-accent-soft p-4 transition hover:border-accent/60">
-            <span className="flex size-10 items-center justify-center rounded-xl bg-accent text-[#0a0a0a]">
-              <UserPlus className="size-5" />
-            </span>
+          <Link href="/admin/users?status=pending" className="corners group relative flex items-center gap-4 overflow-hidden rounded-2xl border border-accent/35 bg-accent/[0.06] p-4 transition hover:border-accent/60">
+            <span className="num glow-text text-[44px]">{pending}</span>
             <span className="flex-1">
-              <span className="block text-[15px] font-semibold">가입 승인 대기 {pending}명</span>
+              <span className="block text-[14px] font-medium">가입 승인 대기</span>
               <span className="text-[12.5px] text-fg-3">팀과 권한을 지정해 승인해 주세요</span>
             </span>
             <ArrowRight className="size-4 text-fg-3 transition group-hover:translate-x-0.5" />
           </Link>
         ) : (
-          <div className="flex items-center gap-4 rounded-2xl border border-line bg-panel p-4">
-            <span className="flex size-10 items-center justify-center rounded-xl bg-panel-3 text-fg-3">
-              <UserPlus className="size-5" />
+          <div className="corners flex items-center gap-4 rounded-2xl border border-line bg-white/[0.015] p-4">
+            <span className="flex size-10 items-center justify-center rounded-full border border-dashed border-line-3 text-fg-3">
+              <UserPlus className="size-4" />
             </span>
             <span>
-              <span className="block text-[15px] font-semibold">승인 대기 없음</span>
+              <span className="block text-[14px] font-medium">승인 대기 없음</span>
               <span className="text-[12.5px] text-fg-3">새 가입 신청이 오면 알림으로 알려드려요</span>
             </span>
           </div>
         )}
         {providers.map((p) => (
-          <div key={p.id} className="flex flex-col gap-1.5 rounded-2xl border border-line bg-panel p-4">
+          <div key={p.id} className="flex flex-col gap-1.5 rounded-2xl border border-line bg-white/[0.015] p-4">
             <div className="flex items-center justify-between">
-              <span className="text-[14px] font-semibold">{p.name}</span>
+              <span className="text-[14px] font-medium">{p.name}</span>
               {p.configured ? (
                 <span className="rounded-md bg-success/12 px-1.5 py-0.5 text-[11px] text-success">● 연결됨</span>
               ) : (
@@ -73,10 +71,10 @@ export default async function AdminHome() {
 
       <UsageDashboard />
 
-      <section className="rounded-2xl border border-line bg-panel">
+      <section className="rounded-2xl border border-line bg-white/[0.015]">
         <div className="flex items-center gap-2 border-b border-line px-5 py-3.5">
           <AlertTriangle className="size-4 text-fg-3" />
-          <h2 className="text-[14px] font-semibold">최근 실패한 생성</h2>
+          <h2 className="text-[14px] font-medium">최근 실패한 생성</h2>
           <span className="text-[12px] text-fg-4">실패·검열은 과금되지 않아요</span>
         </div>
         {failures.length === 0 ? (
