@@ -16,10 +16,13 @@ for (const file of [".env.local", ".env"]) {
 }
 
 async function main() {
-  const url =
-    process.env.DIRECT_DATABASE_URL ??
-    process.env.DATABASE_URL ??
-    "postgresql://zipup:zipup@localhost:5432/zipup";
+  const configured = process.env.DIRECT_DATABASE_URL ?? process.env.DATABASE_URL;
+  if (!configured && process.env.VERCEL) {
+    // Vercel 빌드인데 DB 주소가 없으면 마이그레이션만 건너뛰고 빌드는 계속
+    console.warn("⚠ DATABASE_URL이 없어 마이그레이션을 건너뛰어요. Vercel 환경 변수를 확인해 주세요.");
+    return;
+  }
+  const url = configured ?? "postgresql://zipup:zipup@localhost:5432/zipup";
   const client = postgres(url, { max: 1, prepare: false, onnotice: () => {} });
   try {
     // 검색용 트라이그램 확장 (Supabase에서도 사용 가능)

@@ -134,7 +134,10 @@ function PromptCard({ p, canEdit, onEdit, onDelete }: { p: PromptPreset; canEdit
     <article className="group mb-3 flex break-inside-avoid flex-col gap-3 rounded-2xl border border-line bg-panel p-4 transition hover:border-line-2">
       <header className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-[14.5px] font-semibold">{p.title}</h3>
+          <Link href={`/prompts/${p.id}`} className="group/title flex items-center gap-2">
+            <h3 className="truncate text-[14.5px] font-semibold group-hover/title:underline group-hover/title:underline-offset-4">{p.title}</h3>
+            {p.latestVersion > 1 && <span className="shrink-0 rounded-md bg-panel-3 px-1.5 py-0.5 font-mono text-[10.5px] text-fg-3">v{p.latestVersion}</span>}
+          </Link>
           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-fg-4">
             <span className="rounded bg-panel-3 px-1.5 py-0.5 text-fg-3">{KIND_LABEL[p.kind]}</span>
             {model && (

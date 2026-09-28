@@ -24,6 +24,7 @@ export type PromptPreset = {
   tags: string[];
   visibility: Visibility;
   useCount: number;
+  latestVersion: number;
   author: string;
   mine: boolean;
   updatedAt: string;

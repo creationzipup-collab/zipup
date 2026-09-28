@@ -3,10 +3,11 @@ import { ArrowUpRight, Clapperboard, ImagePlus, Workflow } from "lucide-react";
 import Link from "next/link";
 
 import { MediaThumb } from "@/components/assets/media";
+import { HeroPrompt } from "@/components/home/hero-prompt";
 import { ModelSwatch } from "@/components/studio/model-picker";
 import { Avatar, TimeAgo } from "@/components/ui/misc";
 import { db } from "@/lib/db";
-import { assets, favorites, projects, user } from "@/lib/db/schema";
+import { assets, favorites, projects, promptPresets, user } from "@/lib/db/schema";
 import { IMAGE_MODELS, MODELS, VIDEO_MODELS } from "@/lib/models/registry";
 import { visibleProjectsWhere } from "@/lib/services/access";
 import { assetUrls } from "@/lib/services/assets";
@@ -23,7 +24,7 @@ export default async function HomePage() {
     userName: user.name,
     isFavorite: sql<boolean>`exists(select 1 from ${favorites} where ${favorites.userId} = ${u.id} and ${favorites.assetId} = ${assets.id})`,
   };
-  const [mineRows, teamRows, projectRows] = await Promise.all([
+  const [mineRows, teamRows, projectRows, recentPrompts] = await Promise.all([
     db
       .select(baseSelect)
       .from(assets)
@@ -46,6 +47,12 @@ export default async function HomePage() {
       .where(and(visibleProjectsWhere(u), isNull(projects.archivedAt)))
       .orderBy(desc(projects.lastActivityAt))
       .limit(6),
+    db
+      .select({ id: promptPresets.id, title: promptPresets.title, prompt: promptPresets.prompt, kind: promptPresets.kind })
+      .from(promptPresets)
+      .where(eq(promptPresets.userId, u.id))
+      .orderBy(desc(promptPresets.updatedAt))
+      .limit(4),
   ]);
   const [mine, team] = await Promise.all([toListItems(mineRows), toListItems(teamRows)]);
   const covers = await Promise.all(
@@ -67,7 +74,7 @@ export default async function HomePage() {
           <div className="absolute -bottom-48 left-1/4 size-[480px] rounded-full bg-[#3a2cff] opacity-[0.16] blur-[130px]" />
           <div className="dot-grid absolute inset-0 opacity-50 [mask-image:linear-gradient(to_bottom,black,transparent)]" />
         </div>
-        <div className="relative flex flex-col gap-8 p-6 sm:p-10">
+        <div className="relative flex flex-col gap-7 p-6 sm:p-10">
           <div className="flex flex-col gap-2">
             <span className="text-[13px] font-medium text-fg-3">{greet}</span>
             <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.03em] sm:text-[40px]">
@@ -77,6 +84,7 @@ export default async function HomePage() {
               {u.teamName ?? "팀 미지정"} · 이미지 {IMAGE_MODELS.length}종 · 영상 {VIDEO_MODELS.length}종 모델을 쓸 수 있어요
             </p>
           </div>
+          <HeroPrompt recent={recentPrompts} />
           <div className="grid gap-3 md:grid-cols-3">
             <QuickCard href="/create/image" icon={<ImagePlus />} title="이미지 생성" desc="Seedream · Nano Banana · GPT Image" gradient="from-[#ff5b24]/25 via-transparent" />
             <QuickCard href="/create/video" icon={<Clapperboard />} title="영상 생성" desc="MiniMax H3 · Seedance 2.5 드래프트" gradient="from-[#3a2cff]/30 via-transparent" />

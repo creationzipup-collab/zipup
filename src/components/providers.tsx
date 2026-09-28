@@ -50,8 +50,14 @@ export function useTheme() {
     () => "dark" as const,
   );
   const setTheme = React.useCallback((t: "dark" | "light") => {
-    document.documentElement.dataset.theme = t;
-    document.cookie = `zipup-theme=${t}; path=/; max-age=31536000; samesite=lax`;
+    const apply = () => {
+      document.documentElement.dataset.theme = t;
+      document.cookie = `zipup-theme=${t}; path=/; max-age=31536000; samesite=lax`;
+    };
+    // 지원 브라우저에서는 테마 전환을 부드럽게 교차 페이드
+    const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+    if (doc.startViewTransition && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) doc.startViewTransition(apply);
+    else apply();
   }, []);
   return { theme, setTheme, toggle: () => setTheme(theme === "dark" ? "light" : "dark") };
 }

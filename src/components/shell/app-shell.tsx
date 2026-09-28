@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { LayoutGroup, motion } from "motion/react";
 import * as React from "react";
 
 import { BrandLockup } from "@/components/brand/logo";
@@ -128,11 +129,15 @@ export function AppShell({
   return (
     <ShellContext.Provider value={ctx}>
       <div className="flex min-h-dvh">
-        <aside className="sticky top-0 hidden h-dvh w-[248px] shrink-0 flex-col border-r border-line bg-bg-2 lg:flex">{sidebar}</aside>
+        <aside className="sticky top-0 hidden h-dvh w-[248px] shrink-0 flex-col border-r border-line bg-bg-2 lg:flex">
+          <LayoutGroup id="nav-desktop">{sidebar}</LayoutGroup>
+        </aside>
 
         <Dialog open={navOpen} onOpenChange={setNavOpen}>
           <SheetContent side="left" title={<BrandLockup />} className="w-[280px] lg:hidden">
-            <div className="flex h-full flex-col">{sidebar}</div>
+            <div className="flex h-full flex-col">
+              <LayoutGroup id="nav-mobile">{sidebar}</LayoutGroup>
+            </div>
           </SheetContent>
         </Dialog>
 
@@ -241,7 +246,7 @@ function SidebarInner({
                 active ? "bg-panel-2 font-medium text-fg" : "text-fg-3 hover:bg-panel/80 hover:text-fg",
               )}
             >
-              {active && <span className="absolute -left-3 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-accent" />}
+              {active && <motion.span layoutId="nav-indicator" transition={{ type: "spring", stiffness: 520, damping: 40 }} className="absolute -left-3 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-accent" />}
               <Icon className={cn("size-[17px]", active ? "text-fg" : "text-fg-4 group-hover:text-fg-2")} strokeWidth={1.8} />
               {item.label}
             </Link>
@@ -255,7 +260,7 @@ function SidebarInner({
               isActive("/admin") ? "bg-panel-2 font-medium text-fg" : "text-fg-3 hover:bg-panel/80 hover:text-fg",
             )}
           >
-            {isActive("/admin") && <span className="absolute -left-3 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-accent" />}
+            {isActive("/admin") && <motion.span layoutId="nav-indicator" transition={{ type: "spring", stiffness: 520, damping: 40 }} className="absolute -left-3 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-accent" />}
             <ShieldCheck className="size-[17px] text-fg-4 group-hover:text-fg-2" strokeWidth={1.8} />
             관리자
             {!!user.pendingApprovals && (
