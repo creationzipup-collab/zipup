@@ -48,7 +48,8 @@ export function DocChip({
         title="이 컷의 버전 기록"
       >
         <History className="size-3.5 shrink-0 text-fg-3" />
-        <span className="truncate font-mono text-[12.5px] tracking-[0.02em] text-fg">{label}</span>
+        {/* 컷 코드(영문·숫자)만 모노 — 한글 이름은 자간이 벌어져 보여요 */}
+        <span className={cn("truncate text-[12.5px] text-fg", /^[\x20-\x7E]+$/.test(label) && "font-mono tracking-[0.02em]")}>{label}</span>
         {doc ? (
           <span className="shrink-0 rounded-full border border-accent/40 bg-accent/10 px-1.5 py-px font-mono text-[10.5px] text-accent">v{doc.baseVersion ?? doc.version}</span>
         ) : (

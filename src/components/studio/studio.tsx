@@ -677,13 +677,13 @@ export function Studio({
 
               {/* 작업 위치: 프로젝트 / 컷 — 결과는 여기에 테이크로 쌓이고, 버전도 이 컷 안에서만 올라가요 */}
               <div className="corners flex flex-wrap items-center gap-x-2 gap-y-2 rounded-2xl border border-line bg-white/[0.015] px-3 py-2.5">
-                <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-4">작업 위치</span>
+                <span className="hidden font-mono text-[10px] uppercase tracking-[0.2em] text-fg-4 sm:inline">작업 위치</span>
                 <Select
                   size="sm"
                   value={projectId}
                   onValueChange={setProjectId}
                   options={projects.map((p) => ({ value: p.id, label: p.isPersonal ? `${p.name} (개인)` : p.name }))}
-                  className="min-w-0 max-w-[220px] flex-1 rounded-full border-transparent bg-transparent font-medium hover:bg-white/[0.04]"
+                  className="min-w-0 max-w-[220px] flex-1 whitespace-nowrap rounded-full border-transparent bg-transparent font-medium hover:bg-white/[0.04] [&>span]:truncate"
                 />
                 <span className="text-fg-4">/</span>
                 <Select
@@ -691,10 +691,10 @@ export function Studio({
                   value={cutId ?? "none"}
                   onValueChange={(v) => setCutByProject((m) => ({ ...m, [projectId]: v }))}
                   options={[
-                    { value: "none", label: "컷 없이 (프로젝트에 바로)" },
+                    { value: "none", label: "컷 없이", hint: "프로젝트에 바로" },
                     ...cutOptions.map((c) => ({ value: c.id, label: c.title ? `${c.code} · ${c.title}` : c.code })),
                   ]}
-                  className={cn("min-w-0 max-w-[220px] flex-1 rounded-full border-transparent bg-transparent font-mono hover:bg-white/[0.04]", cutId && "text-accent")}
+                  className={cn("min-w-0 max-w-[220px] flex-1 whitespace-nowrap rounded-full border-transparent bg-transparent hover:bg-white/[0.04] [&>span]:truncate", cutId && "font-mono text-accent")}
                 />
                 <Tip content="다음 번호로 컷 만들기">
                   <Button variant="ghost" size="icon-xs" onClick={() => void addCut()} aria-label="새 컷">
@@ -704,7 +704,7 @@ export function Studio({
                 <span className="ml-auto flex items-center gap-2 text-[11.5px] text-fg-4">
                   {doc ? (
                     <>
-                      <span className="rounded-full border border-accent/40 bg-accent/10 px-2 py-px font-mono text-[10.5px] text-accent">
+                      <span className={cn("rounded-full border border-accent/40 bg-accent/10 px-2 py-px text-[10.5px] text-accent", cutCode && "font-mono")}>
                         {docLabel} v{doc.baseVersion ?? doc.version}
                       </span>
                       <span className="hidden sm:inline">버전은 {docLabel} 안에서만 쌓여요</span>
