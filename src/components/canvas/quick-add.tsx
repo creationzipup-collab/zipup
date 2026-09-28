@@ -16,7 +16,8 @@ const TONE: Record<NodeDef["tone"], string> = {
   text: "bg-panel-3 text-fg-2",
   image: "bg-accent/15 text-accent",
   video: "bg-info/15 text-info",
-  note: "bg-[#f5c542]/15 text-[#f5c542]",
+  media: "bg-accent-2/15 text-accent-2",
+  note: "bg-warning/15 text-warning",
 };
 
 type Item = { key: string; label: string; hint: string; icon: NodeDef["icon"]; tone: NodeDef["tone"]; choice: QuickAddChoice; suggested?: boolean };

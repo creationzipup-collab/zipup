@@ -22,12 +22,10 @@ import {
   ViewportPortal,
 } from "@xyflow/react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AnimatePresence } from "motion/react";
 import {
   ArrowLeft,
   Check,
   CloudOff,
-  GalleryVerticalEnd,
   Keyboard,
   LayoutList,
   Loader2,
@@ -55,30 +53,31 @@ import { useConfirm } from "@/components/ui/confirm";
 import { Switch } from "@/components/ui/controls";
 import { Popover, PopoverContent, PopoverTrigger, Tip } from "@/components/ui/menu";
 import { Kbd } from "@/components/ui/misc";
+import { useAssetMutations } from "@/lib/client/assets";
 import { createGenerationRequest, useActiveGenerations, usePushGenerations, type GenerationDTO } from "@/lib/client/generations";
 import { useIsClient } from "@/lib/client/use-is-client";
 import { defaultParams, getModel, sanitizeParams } from "@/lib/models/registry";
-import { ACTIVE_STATUSES, TERMINAL_STATUSES } from "@/lib/types";
+import { ACTIVE_STATUSES, type Flag, TERMINAL_STATUSES } from "@/lib/types";
 import { cn, fetchJson, randomId, usd } from "@/lib/utils";
 
-import { CanvasContext, chosenOutput, portType, type AssetInputData, type GenData, type ListData, type PromptData } from "./canvas-context";
+import { CanvasContext, canConnect, chosenOutput, portType, type AssetInputData, type GenData, type ListData, type PromptData } from "./canvas-context";
 import { NODE_DEF, NODE_DEFS, type NodeKind } from "./catalog";
 import { cloneGraph, copyToClipboard, type Guides, mergeRuntime, readClipboard, snapToGuides, type Snapshot, useCanvasHistory } from "./helpers";
 import { NODE_TYPES } from "./nodes";
 import { PeerStack, RemoteCursors, usePresence } from "./presence";
 import { QuickAdd, type QuickAddChoice, type QuickAddFrom } from "./quick-add";
-import { type CanvasResult, groupRuns, ResultsPanel, type ResultRun } from "./results-panel";
+import { type CanvasResult, groupRuns } from "./results-list";
 import { type LaserStroke, SKETCH_COLORS, SketchCapture, type SketchMode, SketchStrokes, SketchToolbar, type Stroke } from "./sketch";
 
 type Graph = { nodes: Node[]; edges: Edge[]; viewport?: { x: number; y: number; zoom: number }; sketch?: Stroke[] };
 
-const PORT_STROKE = { text: "rgb(223 232 242 / 0.42)", image: "#1ea7ff", video: "#a48bff" } as const;
-const NODE_WIDTH: Partial<Record<NodeKind, number>> = { prompt: 300, list: 290, imageInput: 240, videoInput: 240, imageGen: 340, videoGen: 340, note: 260 };
+const PORT_STROKE = { text: "rgb(223 232 242 / 0.42)", image: "#1ea7ff", video: "#a48bff", media: "#6cc8ff" } as const;
+const NODE_WIDTH: Partial<Record<NodeKind, number>> = { prompt: 300, list: 290, imageInput: 240, videoInput: 240, imageGen: 340, videoGen: 340, results: 400, note: 260 };
 /** 반복 입력으로 한 번에 돌릴 수 있는 최대 조합 수 */
 const MAX_FAN_OUT = 24;
 
-type Prefs = { wheel: "pan" | "zoom"; snap: boolean; minimap: boolean; results: boolean };
-const DEFAULT_PREFS: Prefs = { wheel: "pan", snap: false, minimap: true, results: false };
+type Prefs = { wheel: "pan" | "zoom"; snap: boolean; minimap: boolean };
+const DEFAULT_PREFS: Prefs = { wheel: "pan", snap: false, minimap: true };
 const PREFS_KEY = "zipup-canvas-prefs";
 
 function loadPrefs(): Prefs {
@@ -94,10 +93,17 @@ function toRef(o: GenerationDTO["outputs"][number]): RefAsset {
 }
 
 const edgeStyle = (port: keyof typeof PORT_STROKE) => ({ stroke: PORT_STROKE[port], strokeWidth: 1.6 });
-const edgePort = (e: Edge): keyof typeof PORT_STROKE => portType(undefined, e.targetHandle) ?? portType(undefined, e.sourceHandle) ?? "text";
+/** 선 색: 받는 쪽 종류로, 결과 리스트로 들어가는 선은 보내는 쪽 종류로 */
+const edgePort = (e: Pick<Edge, "sourceHandle" | "targetHandle">): keyof typeof PORT_STROKE => {
+  const t = portType(undefined, e.targetHandle);
+  const s = portType(undefined, e.sourceHandle);
+  if (t && t !== "media") return t;
+  if (s && s !== "media") return s;
+  return "media";
+};
 
-const TYPE_LABEL: Record<string, string> = { prompt: "프롬프트", list: "반복 입력", imageInput: "이미지", videoInput: "영상", imageGen: "이미지 생성", videoGen: "영상 생성", note: "메모" };
-/** 결과 모음에서 한 번에 불러오는 실행 수 */
+const TYPE_LABEL: Record<string, string> = { prompt: "프롬프트", list: "반복 입력", imageInput: "이미지", videoInput: "영상", imageGen: "이미지 생성", videoGen: "영상 생성", results: "결과 리스트", note: "메모" };
+/** 결과 리스트용으로 한 번에 불러오는 실행 수 */
 const RESULTS_PAGE = 120;
 
 export function CanvasEditor(props: {
@@ -151,8 +157,8 @@ function Editor({
   const [dragPort, setDragPort] = React.useState<keyof typeof PORT_STROKE | null>(null);
   const [prefs, setPrefsState] = React.useState<Prefs>(DEFAULT_PREFS);
   const [outline, setOutline] = React.useState(false);
-  const [resultsNode, setResultsNode] = React.useState<string | null>(null);
   const [resultsLimit, setResultsLimit] = React.useState(RESULTS_PAGE);
+  const { update: updateAssets } = useAssetMutations();
   const [help, setHelp] = React.useState(false);
   const pointer = React.useRef<{ x: number; y: number } | null>(null);
 
@@ -306,14 +312,15 @@ function Editor({
     if (mine.length) applyGenerations(mine);
   }, [active, applyGenerations]);
 
-  /* -------------------------------- 결과 모음 -------------------------------- */
+  /* -------------------------------- 결과 리스트 -------------------------------- */
+  const hasResultsNode = nodes.some((n) => n.type === "results");
   const resultsKey = React.useMemo(() => ["generations", "canvas", canvas.id] as const, [canvas.id]);
   const resultsQuery = useQuery({
     queryKey: [...resultsKey, resultsLimit],
     queryFn: () => fetchJson<{ items: CanvasResult[]; hasMore: boolean }>(`/api/canvases/${canvas.id}/results?limit=${resultsLimit}`),
     placeholderData: keepPreviousData,
-    // 생성 중이면 자주, 결과 모음을 열어 두면 가끔(다른 사람이 돌린 것도 보이게)
-    refetchInterval: (q) => (q.state.data?.items.some((g) => ACTIVE_STATUSES.includes(g.status)) ? 2500 : prefs.results ? 15_000 : false),
+    // 생성 중이면 자주, 결과 리스트가 있으면 가끔(다른 사람이 돌린 것도 보이게)
+    refetchInterval: (q) => (q.state.data?.items.some((g) => ACTIVE_STATUSES.includes(g.status)) ? 2500 : hasResultsNode ? 30_000 : false),
   });
   const resultItems = resultsQuery.data?.items;
   React.useEffect(() => {
@@ -325,25 +332,70 @@ function Editor({
     for (const r of runs) if (r.nodeId) m.set(r.nodeId, (m.get(r.nodeId) ?? 0) + r.outputs.length);
     return m;
   }, [runs]);
-  const resultTotal = runs.reduce((s, r) => s + r.outputs.length, 0);
+  // OK·KEEP·NG는 결과 목록 캐시에 바로 반영해요 (화면도, 실행할 때 읽는 값도 같은 곳)
+  const flagOf = React.useCallback((a: { id: string; flag: Flag | null }) => a.flag, []);
+  const setFlag = React.useCallback(
+    (assetId: string, flag: Flag | null) => {
+      qc.setQueriesData<{ items: CanvasResult[]; hasMore: boolean }>({ queryKey: resultsKey }, (d) =>
+        d ? { ...d, items: d.items.map((g) => (g.outputs.some((o) => o.id === assetId) ? { ...g, outputs: g.outputs.map((o) => (o.id === assetId ? { ...o, flag } : o)) } : g)) } : d,
+      );
+      void updateAssets([assetId], { flag });
+    },
+    [qc, resultsKey, updateAssets],
+  );
+
+  /** 결과 리스트에 이어진 생성 노드 */
+  const sourcesOf = React.useCallback((listId: string, es: Edge[]) => Array.from(new Set(es.filter((e) => e.target === listId && e.targetHandle === "collect").map((e) => e.source))), []);
+  /** 결과 리스트에서 OK한 결과 (최신 순) — 화면에 그릴 때 */
+  const okNow = React.useCallback(
+    (listId: string) => {
+      const sources = new Set(sourcesOf(listId, edges));
+      return runs
+        .filter((r) => r.nodeId && sources.has(r.nodeId))
+        .flatMap((r) => r.outputs)
+        .filter((o) => flagOf(o) === "pick");
+    },
+    [sourcesOf, edges, runs, flagOf],
+  );
 
   /* ---------------------------------- 실행 ---------------------------------- */
   type Dim = { handle: string; texts?: string[]; assets?: RefAsset[] };
 
   /** 들어오는 연결 모으기 — 반복 입력은 "차원"으로 따로 (항목마다 한 번씩 실행) */
   const gather = React.useCallback((nodeId: string) => {
-    const ns = nodesRef.current;
-    const incoming = edgesRef.current.filter((e) => e.target === nodeId);
+    const ns = rf.getNodes();
+    const es = rf.getEdges();
+    const incoming = es.filter((e) => e.target === nodeId);
     const prompts: string[] = [];
     const images: string[] = [];
     const videos: string[] = [];
     const dims: Dim[] = [];
+    const refsFromLists: string[] = [];
     let start: string | undefined;
     let end: string | undefined;
     let missing: string | null = null;
     for (const e of incoming) {
       const src = ns.find((n) => n.id === e.source);
       if (!src) continue;
+      if (src.type === "results") {
+        // 결과 리스트에서 OK한 것: 레퍼런스는 한꺼번에, 시작·끝 프레임과 영상은 하나씩 돌려요
+        const sources = new Set(es.filter((x) => x.target === src.id && x.targetHandle === "collect").map((x) => x.source));
+        const latest = qc.getQueryData<{ items: CanvasResult[] }>([...resultsKey, resultsLimit])?.items ?? [];
+        const ok = latest
+          .filter((g) => g.canvasNodeId && sources.has(g.canvasNodeId))
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+          .flatMap((g) => g.outputs)
+          .filter((o) => o.flag === "pick")
+          .map(toRef);
+        const want = ok.filter((a) => a.kind === (e.targetHandle === "videoIn" ? "video" : "image"));
+        if (!want.length) {
+          missing = `${TYPE_LABEL.results}에 OK한 ${e.targetHandle === "videoIn" ? "영상이" : "이미지가"} 없어요. 넘길 결과에 OK를 눌러 주세요.`;
+          continue;
+        }
+        if (e.targetHandle === "refs") refsFromLists.push(...want.map((a) => a.id));
+        else if (e.targetHandle) dims.push({ handle: e.targetHandle, assets: want });
+        continue;
+      }
       if (src.type === "list") {
         const d = src.data as ListData;
         if (d.mode === "image") {
@@ -381,8 +433,8 @@ function Editor({
           break;
       }
     }
-    return { prompts, images, videos, start, end, dims, missing };
-  }, []);
+    return { prompts, images: [...images, ...refsFromLists], videos, start, end, dims, missing };
+  }, [rf, qc, resultsKey, resultsLimit]);
 
   const fanOut = React.useCallback(
     (nodeId: string) => {
@@ -390,6 +442,12 @@ function Editor({
       let n = 1;
       for (const e of incoming) {
         const src = nodes.find((x) => x.id === e.source);
+        if (src?.type === "results") {
+          if (e.targetHandle === "refs") continue;
+          const len = okNow(src.id).filter((a) => a.kind === (e.targetHandle === "videoIn" ? "video" : "image")).length;
+          if (len) n *= len;
+          continue;
+        }
         if (src?.type !== "list") continue;
         const d = src.data as ListData;
         const len = d.mode === "image" ? (d.assets ?? []).length : (d.items ?? []).filter((t) => t.trim()).length;
@@ -397,12 +455,12 @@ function Editor({
       }
       return n;
     },
-    [nodes, edges],
+    [nodes, edges, okNow],
   );
 
   const runNode = React.useCallback(
     async (nodeId: string) => {
-      const node = nodesRef.current.find((n) => n.id === nodeId);
+      const node = rf.getNode(nodeId);
       if (!node || (node.type !== "imageGen" && node.type !== "videoGen")) return;
       const d = node.data as GenData;
       const model = getModel(d.modelId);
@@ -436,7 +494,7 @@ function Editor({
             params,
             inputs: {
               images: [...g.images, ...(asset("refs") ? [asset("refs")!] : [])],
-              videos: g.videos,
+              videos: [...g.videos, ...(asset("videoIn") ? [asset("videoIn")!] : [])],
               startFrame: asset("start") ?? g.start,
               endFrame: asset("end") ?? g.end,
             },
@@ -508,14 +566,19 @@ function Editor({
       const t = nodesRef.current.find((n) => n.id === c.target);
       const a = portType(s?.type, c.sourceHandle);
       const b = portType(t?.type, c.targetHandle);
-      if (!a || a !== b) {
-        toast.error("같은 종류끼리만 연결할 수 있어요. (텍스트↔텍스트, 이미지↔이미지, 영상↔영상)");
+      if (c.source === c.target) return;
+      if (!canConnect(a, b)) {
+        toast.error(
+          b === "media"
+            ? "결과 리스트에는 이미지·영상 생성 노드의 출력을 이어 주세요."
+            : "같은 종류끼리만 연결할 수 있어요. (텍스트↔텍스트, 이미지↔이미지, 영상↔영상)",
+        );
         return;
       }
       setEdges((es) => {
         // 시작/끝 프레임은 하나만
         const filtered = c.targetHandle === "start" || c.targetHandle === "end" ? es.filter((e) => !(e.target === c.target && e.targetHandle === c.targetHandle)) : es;
-        return addEdge({ ...c, style: edgeStyle(a) }, filtered);
+        return addEdge({ ...c, style: edgeStyle(edgePort(c)) }, filtered);
       });
     },
     [setEdges],
@@ -560,7 +623,7 @@ function Editor({
           : { id: `e-${randomId()}`, source: id, sourceHandle: choice.handle, target: from.nodeId, targetHandle: from.handleId };
       setEdges((es) => {
         const filtered = edge.targetHandle === "start" || edge.targetHandle === "end" ? es.filter((e) => !(e.target === edge.target && e.targetHandle === edge.targetHandle)) : es;
-        return [...filtered, { ...edge, style: edgeStyle(from.port) }];
+        return [...filtered, { ...edge, style: edgeStyle(edgePort(edge)) }];
       });
     }
     return id;
@@ -679,18 +742,6 @@ function Editor({
         return;
       }
       if (k === "?") return setHelp((h) => !h);
-      if (k === "r") {
-        setOutline(false);
-        setResultsNode(null);
-        setPrefsState((p) => {
-          const next = { ...p, results: !p.results };
-          try {
-            localStorage.setItem(PREFS_KEY, JSON.stringify(next));
-          } catch {}
-          return next;
-        });
-        return;
-      }
       if (k.startsWith("arrow") && canEdit) {
         const sel = nodesRef.current.some((n) => n.selected);
         if (!sel) return;
@@ -727,27 +778,10 @@ function Editor({
   }, [labelSig]);
   const nodeLabel = React.useCallback((id: string) => labels.get(id) ?? "노드", [labels]);
 
-  /* ---------------------------- 결과 모음 동작 ---------------------------- */
-  const setResultsOpen = (open: boolean, node: string | null = null) => {
-    setResultsNode(node);
-    if (open) setOutline(false);
-    setPrefs({ results: open });
-  };
-  const openResults = React.useCallback((nodeId: string) => {
-    setResultsNode(nodeId);
-    setOutline(false);
-    setPrefsState((p) => {
-      const next = { ...p, results: true };
-      try {
-        localStorage.setItem(PREFS_KEY, JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-  }, []);
-
+  /* ---------------------------- 결과 리스트 동작 ---------------------------- */
   const focusNode = React.useCallback(
     (id: string) => {
-      const n = nodesRef.current.find((x) => x.id === id);
+      const n = rf.getNode(id);
       if (!n) return;
       setNodes((ns) => ns.map((x) => ({ ...x, selected: x.id === id })));
       void rf.fitView({ nodes: [n], duration: 500, padding: 0.6, maxZoom: 1.2 });
@@ -755,49 +789,77 @@ function Editor({
     [rf, setNodes],
   );
 
-  /** 결과 모음에서 고른 결과를 그 노드의 출력으로 (예전 실행이면 그 실행으로 되돌려요) */
-  function pickResult(run: ResultRun, assetId: string) {
-    if (!run.nodeId || !canEdit) return;
-    const idx = run.outputs.findIndex((o) => o.id === assetId);
-    rf.updateNodeData(run.nodeId, {
-      runs: run.generationIds,
-      outputs: run.outputs.map(toRef),
-      status: "completed",
-      error: null,
-      selected: Math.max(0, idx),
-      pickId: assetId,
-    });
-    toast(`${nodeLabel(run.nodeId)} → 다음 노드로 이 결과를 넘겨요`);
-  }
+  /** 겹치지 않는 자리 찾기 (후보를 차례로 보고, 다 겹치면 첫 후보) */
+  const freeSpot = React.useCallback((all: Node[], candidates: { x: number; y: number }[], size: { w: number; h: number }) => {
+    const boxes = all.map((n) => ({ x: n.position.x, y: n.position.y, w: n.measured?.width ?? n.width ?? 300, h: n.measured?.height ?? n.height ?? 200 }));
+    const hit = (p: { x: number; y: number }) => boxes.some((b) => p.x < b.x + b.w + 24 && p.x + size.w + 24 > b.x && p.y < b.y + b.h + 24 && p.y + size.h + 24 > b.y);
+    return candidates.find((p) => !hit(p)) ?? candidates[0];
+  }, []);
 
-  /** 결과를 캔버스에 입력 노드로 꺼내기 (만든 노드 오른쪽에 차례로) */
-  const placed = React.useRef(0);
-  function placeResult(asset: RefAsset, nodeId: string | null) {
-    const src = nodeId ? nodesRef.current.find((n) => n.id === nodeId) : undefined;
-    const step = placed.current++ % 6;
-    const pos = src
-      ? { x: src.position.x + (src.measured?.width ?? 340) + 90, y: src.position.y + step * 44 }
-      : rf.screenToFlowPosition({ x: window.innerWidth / 2 - 200 + step * 24, y: window.innerHeight / 2 + step * 24 });
-    const id = newId(`${asset.kind}Input`);
-    setNodes((ns) => [
-      ...ns.map((n) => ({ ...n, selected: false })),
-      { id, type: asset.kind === "image" ? "imageInput" : "videoInput", position: pos, data: { asset }, selected: true },
-    ]);
-    setTimeout(() => {
-      const n = rf.getNode(id);
-      if (n) void rf.fitView({ nodes: [n], duration: 450, padding: 1.2, maxZoom: Math.max(rf.getZoom(), 0.6) });
-    }, 60);
-  }
+  /** 생성 노드의 결과 리스트로: 이어진 게 있으면 그리로, 없으면 옆에 만들어 이어요 */
+  const collectResults = React.useCallback(
+    (genId: string) => {
+      const linked = rf.getEdges().find((e) => e.source === genId && e.targetHandle === "collect");
+      if (linked) return focusNode(linked.target);
+      const all = rf.getNodes();
+      const src = all.find((n) => n.id === genId);
+      if (!src || !canEdit) return;
+      const def = NODE_DEF.results;
+      const size = { w: def.style!.width, h: def.style!.height };
+      const w = src.measured?.width ?? 340;
+      const h = src.measured?.height ?? 520;
+      const pos = freeSpot(
+        all,
+        [
+          { x: src.position.x + w + 90, y: src.position.y },
+          { x: src.position.x, y: src.position.y + h + 70 },
+          { x: src.position.x + w + 90, y: src.position.y + h + 70 },
+        ],
+        size,
+      );
+      const id = newId("results");
+      const handle = src.type === "videoGen" ? "video" : "image";
+      setNodes((ns) => [...ns.map((n) => ({ ...n, selected: false })), { id, type: "results", position: pos, data: def.make(), style: def.style, selected: true }]);
+      setEdges((es) => [...es, { id: `e-${randomId()}`, source: genId, sourceHandle: handle, target: id, targetHandle: "collect", style: edgeStyle(handle) }]);
+      setTimeout(() => {
+        const n = rf.getNode(id);
+        if (n) void rf.fitView({ nodes: [n, src], duration: 500, padding: 0.25, maxZoom: Math.max(rf.getZoom(), 0.7) });
+      }, 60);
+    },
+    [canEdit, focusNode, freeSpot, rf, setNodes, setEdges],
+  );
 
-  const chosen = React.useMemo(() => {
-    const m = new Map<string, string>();
-    for (const n of nodes) {
-      if (n.type !== "imageGen" && n.type !== "videoGen") continue;
-      const o = chosenOutput(n.data as GenData);
-      if (o) m.set(n.id, o.id);
-    }
-    return m;
-  }, [nodes]);
+  /** 결과를 캔버스에 입력 노드로 꺼내기 (결과 리스트 오른쪽에 차례로) */
+  const placeAsset = React.useCallback(
+    (asset: RefAsset, nearId: string | null) => {
+      const all = rf.getNodes();
+      const near = nearId ? all.find((n) => n.id === nearId) : undefined;
+      const step = all.filter((n) => n.type === "imageInput" || n.type === "videoInput").length % 6;
+      const pos = near
+        ? { x: near.position.x + (near.measured?.width ?? 340) + 90, y: near.position.y + step * 44 }
+        : rf.screenToFlowPosition({ x: window.innerWidth / 2 - 200 + step * 24, y: window.innerHeight / 2 + step * 24 });
+      const id = newId(`${asset.kind}Input`);
+      setNodes((ns) => [
+        ...ns.map((n) => ({ ...n, selected: false })),
+        { id, type: asset.kind === "image" ? "imageInput" : "videoInput", position: pos, data: { asset }, selected: true },
+      ]);
+      setTimeout(() => {
+        const n = rf.getNode(id);
+        if (n) void rf.fitView({ nodes: [n], duration: 450, padding: 1.2, maxZoom: Math.max(rf.getZoom(), 0.6) });
+      }, 60);
+    },
+    [rf, setNodes],
+  );
+
+  const listRuns = React.useCallback(
+    (listId: string) => {
+      const sources = new Set(sourcesOf(listId, edges));
+      return runs.filter((r) => r.nodeId && sources.has(r.nodeId));
+    },
+    [runs, edges, sourcesOf],
+  );
+  const listSources = React.useCallback((listId: string) => sourcesOf(listId, edges), [edges, sourcesOf]);
+  const loadMore = React.useCallback(() => setResultsLimit((l) => Math.min(300, l + RESULTS_PAGE)), []);
 
   const totalEstimate = nodes.reduce((sum, n) => {
     if (n.type !== "imageGen" && n.type !== "videoGen") return sum;
@@ -815,17 +877,44 @@ function Editor({
     () => ({
       canvasId: canvas.id,
       projectId: canvas.projectId,
+      meId: me.id,
       canEdit,
       status,
       runNode,
       fanOut,
       pickAsset: (nodeId: string, kind: "image" | "video", multiple?: boolean) => setPicker({ nodeId, kind, multiple }),
       openAsset: (a: RefAsset) => setLightbox({ items: [{ id: a.id, kind: a.kind, urls: a.urls, width: a.width, height: a.height, durationSec: a.durationSec, filename: a.filename }], index: 0 }),
+      openAssets: (items: LightboxItem[], index: number) => setLightbox({ items, index }),
       nodeLabel,
       resultCount: (id: string) => resultCounts.get(id) ?? 0,
-      openResults,
+      collectResults,
+      listRuns,
+      listSources,
+      results: { loading: resultsQuery.isLoading, hasMore: !!resultsQuery.data?.hasMore, loadMore },
+      flagOf,
+      setFlag,
+      placeAsset,
     }),
-    [canvas.id, canvas.projectId, canEdit, status, runNode, fanOut, nodeLabel, resultCounts, openResults],
+    [
+      canvas.id,
+      canvas.projectId,
+      me.id,
+      canEdit,
+      status,
+      runNode,
+      fanOut,
+      nodeLabel,
+      resultCounts,
+      collectResults,
+      listRuns,
+      listSources,
+      resultsQuery.isLoading,
+      resultsQuery.data?.hasMore,
+      loadMore,
+      flagOf,
+      setFlag,
+      placeAsset,
+    ],
   );
 
   const figma = prefs.wheel === "pan";
@@ -907,7 +996,7 @@ function Editor({
               zoomable
               className="!rounded-xl !border !border-line-2"
               maskColor="rgb(0 0 0 / 0.5)"
-              nodeColor={(n) => (n.type === "imageGen" || n.type === "imageInput" ? "#1ea7ff" : n.type === "videoGen" || n.type === "videoInput" ? "#a48bff" : n.type === "note" ? "#f5b83d" : "#4a5560")}
+              nodeColor={(n) => (n.type === "imageGen" || n.type === "imageInput" ? "#1ea7ff" : n.type === "videoGen" || n.type === "videoInput" ? "#a48bff" : n.type === "note" ? "#f5b83d" : n.type === "results" ? "#6cc8ff" : "#4a5560")}
             />
           )}
 
@@ -993,19 +1082,10 @@ function Editor({
                 <Button
                   variant={outline ? "secondary" : "ghost"}
                   size="icon-sm"
-                  onClick={() => {
-                    if (!outline) setResultsOpen(false);
-                    setOutline((o) => !o);
-                  }}
+                  onClick={() => setOutline((o) => !o)}
                   aria-label="노드 목록"
                 >
                   <LayoutList />
-                </Button>
-              </Tip>
-              <Tip content="결과 모음 — 이 캔버스에서 나온 결과 전부" shortcut="R">
-                <Button variant={prefs.results ? "secondary" : "ghost"} size="sm" onClick={() => setResultsOpen(!prefs.results)} aria-pressed={prefs.results}>
-                  <GalleryVerticalEnd /> 결과
-                  <span className={cn("font-mono text-[11px] tabular-nums", resultTotal ? "text-accent" : "text-fg-4")}>{resultTotal}</span>
                 </Button>
               </Tip>
               <span className="px-1 font-mono text-[12px] text-fg-3">예상 {usd(Math.round(totalEstimate * 1_000_000))}</span>
@@ -1032,6 +1112,7 @@ function Editor({
                           "flex size-10 items-center justify-center rounded-xl text-fg-2 transition hover:bg-panel-3 hover:text-fg",
                           p.tone === "image" && "text-accent",
                           p.tone === "video" && "text-info",
+                          p.tone === "media" && "text-accent-2",
                         )}
                       >
                         <Icon className="size-[18px]" />
@@ -1049,8 +1130,8 @@ function Editor({
             </Panel>
           )}
 
-          {/* 오른쪽 아래: 확대·맞추기·설정 (결과 모음이 열리면 그 옆으로) */}
-          <Panel position="bottom-right" className={cn("!m-3 transition-[margin] duration-300", prefs.results && "sm:!mr-[416px]")}>
+          {/* 오른쪽 아래: 확대·맞추기·설정 */}
+          <Panel position="bottom-right" className="!m-3">
             <ZoomBar
               prefs={prefs}
               onPrefs={setPrefs}
@@ -1115,29 +1196,6 @@ function Editor({
 
         {outline && <Outline nodes={nodes} label={nodeLabel} onClose={() => setOutline(false)} onFocus={(n) => focusNode(n.id)} />}
 
-        <AnimatePresence>
-          {prefs.results && (
-            <ResultsPanel
-              key="results"
-              runs={runs}
-              loading={resultsQuery.isLoading}
-              hasMore={!!resultsQuery.data?.hasMore}
-              onMore={() => setResultsLimit((l) => Math.min(300, l + RESULTS_PAGE))}
-              me={me.id}
-              canEdit={canEdit}
-              nodeExists={(id) => labels.has(id)}
-              nodeLabel={nodeLabel}
-              filterNode={resultsNode}
-              onFilterNode={setResultsNode}
-              chosen={chosen}
-              onPick={pickResult}
-              onPlace={placeResult}
-              onFocusNode={focusNode}
-              onOpen={(items, index) => setLightbox({ items, index })}
-              onClose={() => setResultsOpen(false)}
-            />
-          )}
-        </AnimatePresence>
 
         {help && <ShortcutHelp onClose={() => setHelp(false)} />}
       </div>
@@ -1298,6 +1356,7 @@ function Outline({ nodes, label, onFocus, onClose }: { nodes: Node[]; label: (id
       return l.mode === "image" ? `이미지 ${(l.assets ?? []).length}장` : `${(l.items ?? []).filter((t) => t.trim()).length}개 항목`;
     }
     if (n.type === "imageGen" || n.type === "videoGen") return getModel(String(d.modelId))?.name ?? "";
+    if (n.type === "results") return "연결한 생성 노드의 결과";
     const a = (d as AssetInputData).asset;
     return a?.filename ?? "(비어 있음)";
   };
@@ -1345,7 +1404,6 @@ const SHORTCUTS: [string, string][] = [
   ["⌘A", "모두 선택"],
   ["방향키 (⇧)", "선택한 노드 1px(10px) 이동"],
   ["⇧1 · ⇧2", "전체 보기 · 선택한 노드 보기"],
-  ["R", "결과 모음 열고 닫기"],
   ["⌘+ · ⌘- · ⌘0", "확대 · 축소 · 100%"],
   ["⌫", "선택 삭제"],
 ];

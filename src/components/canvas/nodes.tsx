@@ -1,6 +1,6 @@
 "use client";
 
-import { Handle, NodeResizer, Position, useReactFlow, type NodeProps } from "@xyflow/react";
+import { NodeResizer, useReactFlow, type NodeProps } from "@xyflow/react";
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -29,74 +29,9 @@ import { defaultParams, IMAGE_MODELS, sanitizeParams, VIDEO_MODELS } from "@/lib
 import { GENERATION_STATUS_LABEL } from "@/lib/types";
 import { cn, usd } from "@/lib/utils";
 
-import { chosenOutput, PORT_COLOR, useCanvas, type AssetInputData, type GenData, type ListData, type NoteData, type PortType, type PromptData } from "./canvas-context";
-
-/** 노드 머리 아이콘 바탕: 이미지는 하늘색, 영상은 보라 */
-const TINT = { image: "rgb(30 167 255 / 0.16)", video: "rgb(164 139 255 / 0.18)" } as const;
-
-function Port({ type, id, port, top, label }: { type: "source" | "target"; id: string; port: PortType; top?: number | string; label?: string }) {
-  return (
-    <Handle
-      type={type}
-      id={id}
-      position={type === "source" ? Position.Right : Position.Left}
-      className="!size-3 !border-2 !border-[var(--bg)] transition-transform hover:!scale-125"
-      style={{ background: PORT_COLOR[port], top }}
-      title={label}
-    />
-  );
-}
-
-function PortLabel({ side, top, children }: { side: "left" | "right"; top: number | string; children: React.ReactNode }) {
-  return (
-    <span
-      className={cn("pointer-events-none absolute -translate-y-1/2 whitespace-nowrap font-mono text-[9.5px] uppercase tracking-wider text-fg-4", side === "left" ? "left-3" : "right-3")}
-      style={{ top }}
-    >
-      {children}
-    </span>
-  );
-}
-
-function Shell({
-  selected,
-  icon,
-  title,
-  accent,
-  children,
-  className,
-  right,
-  running,
-}: {
-  running?: boolean;
-  selected?: boolean;
-  icon: React.ReactNode;
-  title: React.ReactNode;
-  accent?: string;
-  children: React.ReactNode;
-  className?: string;
-  right?: React.ReactNode;
-}) {
-  return (
-    <div
-      className={cn(
-        "relative flex flex-col rounded-2xl border bg-panel/92 shadow-[var(--shadow-soft)] backdrop-blur-xl transition-[border,box-shadow]",
-        selected ? "border-accent/60 shadow-[0_0_0_4px_rgb(30_167_255/0.12),var(--shadow-soft)]" : "border-line-2 hover:border-line-3",
-        running && "node-running",
-        className,
-      )}
-    >
-      <div className="flex items-center gap-2 border-b border-line px-3 py-2">
-        <span className="flex size-6 items-center justify-center rounded-lg text-fg-2 [&_svg]:size-3.5" style={{ background: accent ?? "var(--panel-3)" }}>
-          {icon}
-        </span>
-        <span className="flex-1 truncate text-[12.5px] font-semibold">{title}</span>
-        {right}
-      </div>
-      {children}
-    </div>
-  );
-}
+import { chosenOutput, useCanvas, type AssetInputData, type GenData, type ListData, type NoteData, type PromptData } from "./canvas-context";
+import { Port, PortLabel, Shell, TINT } from "./node-parts";
+import { ResultsNode } from "./results-node";
 
 /* --------------------------------- 텍스트 --------------------------------- */
 
@@ -250,9 +185,9 @@ export function NoteNode({ id, data, selected }: NodeProps) {
   const d = data as NoteData;
   const { updateNodeData } = useReactFlow();
   return (
-    <div className={cn("relative h-full min-h-[120px] w-full min-w-[200px] rounded-2xl border bg-[#f5c542]/12 p-3", selected ? "border-[#f5c542]/70" : "border-[#f5c542]/25")}>
-      <NodeResizer isVisible={!!selected} minWidth={200} minHeight={120} lineClassName="!border-[#f5c542]/50" handleClassName="!bg-[#f5c542]" />
-      <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-[#f5c542]">
+    <div className={cn("relative h-full min-h-[120px] w-full min-w-[200px] rounded-2xl border bg-warning/[0.09] p-3", selected ? "border-warning/70" : "border-warning/25")}>
+      <NodeResizer isVisible={!!selected} minWidth={200} minHeight={120} lineClassName="!border-warning/50" handleClassName="!bg-warning" />
+      <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-warning">
         <StickyNote className="size-3.5" /> 메모
       </div>
       <textarea
@@ -318,7 +253,7 @@ export function VideoInputNode(props: NodeProps) {
 
 function GenNode({ id, data, selected, kind }: NodeProps & { kind: "image" | "video" }) {
   const d = data as GenData;
-  const { runNode, canEdit, status, openAsset, fanOut, nodeLabel, resultCount, openResults } = useCanvas();
+  const { runNode, canEdit, status, openAsset, fanOut, nodeLabel, resultCount, collectResults } = useCanvas();
   const results = resultCount(id);
   const times = fanOut(id);
   const { updateNodeData } = useReactFlow();
@@ -468,14 +403,14 @@ function GenNode({ id, data, selected, kind }: NodeProps & { kind: "image" | "vi
         {results > 0 && (
           <button
             type="button"
-            onClick={() => openResults(id)}
+            onClick={() => collectResults(id)}
             className="nodrag -mb-1 flex items-center justify-between rounded-lg border border-line px-2.5 py-1.5 text-[11.5px] text-fg-3 transition hover:border-line-3 hover:text-fg"
           >
             <span>
               지금까지 결과 <span className="font-mono tabular-nums text-fg">{results}</span>개
             </span>
             <span className="flex items-center gap-0.5">
-              결과 모음 <ArrowUpRight className="size-3.5" />
+              결과 리스트 <ArrowUpRight className="size-3.5" />
             </span>
           </button>
         )}
@@ -500,4 +435,5 @@ export const NODE_TYPES = {
   videoInput: VideoInputNode,
   imageGen: ImageGenNode,
   videoGen: VideoGenNode,
+  results: ResultsNode,
 };

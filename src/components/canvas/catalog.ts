@@ -1,8 +1,8 @@
-import { Clapperboard, ImageIcon, ImagePlus, ListOrdered, type LucideIcon, StickyNote, Type, Video } from "lucide-react";
+import { Clapperboard, GalleryVerticalEnd, ImageIcon, ImagePlus, ListOrdered, type LucideIcon, StickyNote, Type, Video } from "lucide-react";
 
 import type { PortType } from "./canvas-context";
 
-export type NodeKind = "prompt" | "list" | "imageInput" | "videoInput" | "imageGen" | "videoGen" | "note";
+export type NodeKind = "prompt" | "list" | "imageInput" | "videoInput" | "imageGen" | "videoGen" | "results" | "note";
 
 export type PortDef = { id: string; port: PortType; label: string };
 
@@ -12,7 +12,7 @@ export type NodeDef = {
   desc: string;
   icon: LucideIcon;
   /** 아이콘 색 */
-  tone: "text" | "image" | "video" | "note";
+  tone: "text" | "image" | "video" | "media" | "note";
   make: () => Record<string, unknown>;
   style?: { width: number; height: number };
   inputs: PortDef[];
@@ -98,6 +98,18 @@ export const NODE_DEFS: NodeDef[] = [
     keywords: "video generate 영상 생성 seedance minimax h3 i2v",
   },
   {
+    type: "results",
+    label: "결과 리스트",
+    desc: "이은 생성 노드의 결과가 실행할 때마다 쌓여요",
+    icon: GalleryVerticalEnd,
+    tone: "media",
+    make: () => ({ only: "all" }),
+    style: { width: 400, height: 480 },
+    inputs: [{ id: "collect", port: "media", label: "결과" }],
+    outputs: () => [{ id: "ok", port: "media", label: "OK한 결과" }],
+    keywords: "results list gallery collect output 결과 리스트 목록 모음 모아보기 갤러리 셀렉 ok",
+  },
+  {
     type: "note",
     label: "메모",
     desc: "기획 메모·설명",
@@ -140,11 +152,22 @@ export function suggestionsFor(from: { handleType: "source" | "target"; port: Po
         : from.port === "image"
           ? [
               ["videoGen", "start", "이 이미지로 영상 만들기 (시작 프레임)"],
+              ["results", "collect", "결과를 리스트에 모으기"],
               ["imageGen", "refs", "이 이미지로 편집·변형"],
               ["videoGen", "refs", "영상 레퍼런스로 쓰기"],
               ["videoGen", "end", "끝 프레임으로 쓰기"],
             ]
-          : [["videoGen", "videoIn", "이 영상 편집·연장"]];
+          : from.port === "video"
+            ? [
+                ["results", "collect", "결과를 리스트에 모으기"],
+                ["videoGen", "videoIn", "이 영상 편집·연장"],
+              ]
+            : [
+                // 결과 리스트의 OK한 결과
+                ["videoGen", "start", "OK한 이미지마다 영상 만들기"],
+                ["imageGen", "refs", "OK한 이미지를 레퍼런스로"],
+                ["videoGen", "videoIn", "OK한 영상 편집·연장"],
+              ];
     for (const [type, handle, hint] of order) {
       const def = NODE_DEF[type];
       out.push({ key: `${type}:${handle}`, type, label: def.label, hint, icon: def.icon, tone: def.tone, data: def.make(), handle });
@@ -161,12 +184,20 @@ export function suggestionsFor(from: { handleType: "source" | "target"; port: Po
           ? [
               ["imageInput", "image", "라이브러리 이미지 연결"],
               ["imageGen", "image", "새로 만든 이미지 연결"],
+              ["results", "ok", "결과 리스트에서 OK한 이미지"],
               ["list", "image", "이미지 여러 장을 하나씩", { mode: "image", items: [], assets: [] }],
             ]
-          : [
-              ["videoInput", "video", "라이브러리 영상 연결"],
-              ["videoGen", "video", "새로 만든 영상 연결"],
-            ];
+          : from.port === "video"
+            ? [
+                ["videoInput", "video", "라이브러리 영상 연결"],
+                ["videoGen", "video", "새로 만든 영상 연결"],
+                ["results", "ok", "결과 리스트에서 OK한 영상"],
+              ]
+            : [
+                // 결과 리스트 입력 ← 생성 노드
+                ["imageGen", "image", "이미지 생성 결과 모으기"],
+                ["videoGen", "video", "영상 생성 결과 모으기"],
+              ];
     for (const [type, handle, hint, data] of order) {
       const def = NODE_DEF[type];
       out.push({ key: `${type}:${handle}`, type, label: def.label, hint, icon: def.icon, tone: def.tone, data: data ?? def.make(), handle });

@@ -46,12 +46,14 @@ function templateGraph(t: string) {
         { id: "i1", type: "imageInput", position: { x: 0, y: 330 }, data: {} },
         { id: "g1", type: "imageGen", position: { x: 380, y: 60 }, data: { modelId: "nano-banana-pro", params: { aspectRatio: "1:1", resolution: "2K" }, count: 2, text: "정면" } },
         { id: "g2", type: "imageGen", position: { x: 820, y: 60 }, data: { modelId: "nano-banana-pro", params: { aspectRatio: "1:1", resolution: "2K" }, count: 2, text: "측면, 같은 캐릭터" } },
+        { id: "r1", type: "results", position: { x: 1260, y: 60 }, data: { only: "all" }, style: { width: 400, height: 480 } },
       ],
       edges: [
         { id: "e1", source: "p1", sourceHandle: "text", target: "g1", targetHandle: "prompt" },
         { id: "e2", source: "i1", sourceHandle: "image", target: "g1", targetHandle: "refs" },
         { id: "e3", source: "p1", sourceHandle: "text", target: "g2", targetHandle: "prompt" },
         { id: "e4", source: "g1", sourceHandle: "image", target: "g2", targetHandle: "refs" },
+        { id: "e5", source: "g2", sourceHandle: "image", target: "r1", targetHandle: "collect" },
       ],
     };
   }
@@ -60,11 +62,13 @@ function templateGraph(t: string) {
       { id: "p1", type: "prompt", position: { x: 0, y: 120 }, data: { text: "비 오는 밤 네온 거리의 인물, 시네마틱 35mm" } },
       { id: "g1", type: "imageGen", position: { x: 380, y: 40 }, data: { modelId: "seedream-5-pro", params: { aspectRatio: "16:9", resolution: "2K" }, count: 1 } },
       { id: "v1", type: "videoGen", position: { x: 820, y: 40 }, data: { modelId: "seedance-2-5", params: { draft: true, duration: 5 }, text: "카메라가 천천히 다가간다" } },
-      { id: "n1", type: "note", position: { x: 0, y: 360 }, data: { text: "① 프롬프트를 적고\n② 이미지 노드 ▶ 실행\n③ 마음에 드는 컷을 고른 뒤 영상 노드 ▶ 실행\n\n상단 '전체 실행'으로 한 번에 돌릴 수도 있어요." } },
+      { id: "r1", type: "results", position: { x: 1240, y: 40 }, data: { only: "all" }, style: { width: 400, height: 480 } },
+      { id: "n1", type: "note", position: { x: 0, y: 360 }, data: { text: "① 프롬프트를 적고\n② 이미지 노드 ▶ 실행\n③ 마음에 드는 컷을 고른 뒤 영상 노드 ▶ 실행\n④ 영상은 결과 리스트에 쌓여요. OK를 누른 것만 다음 노드로 넘어가요\n\n상단 '전체 실행'으로 한 번에 돌릴 수도 있어요." } },
     ],
     edges: [
       { id: "e1", source: "p1", sourceHandle: "text", target: "g1", targetHandle: "prompt" },
       { id: "e2", source: "g1", sourceHandle: "image", target: "v1", targetHandle: "start" },
+      { id: "e3", source: "v1", sourceHandle: "video", target: "r1", targetHandle: "collect" },
     ],
   };
 }

@@ -1,4 +1,4 @@
-// 캔버스 결과 모음: 여러 번 실행한 결과가 한곳에 모이고, 고르기·OK·꺼내기가 되는지
+// 캔버스 결과 리스트: 생성 노드를 이으면 결과가 쌓이고, OK한 결과가 다음 노드로 넘어가는지
 import { chromium } from "@playwright/test";
 const BASE = "http://localhost:3000";
 const OUT = "/tmp/zipup-shots";
@@ -7,6 +7,7 @@ const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 }, 
 const page = await ctx.newPage();
 const errors = [];
 page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+page.on("console", (m) => { if (m.text().includes("Maximum update depth")) errors.push("render loop"); });
 page.on("response", (r) => { if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`); });
 const fail = (m) => { console.log("✗", m); process.exitCode = 1; };
 const ok = (m) => console.log("✓", m);
@@ -17,17 +18,33 @@ const api = async (path, init = {}) => {
   return j;
 };
 const node = (id) => page.locator(`.react-flow__node[data-id="${id}"]`);
-const panel = () => page.locator("aside[aria-label='결과 모음']");
+const tiles = (id) => node(id).locator("button[aria-label$='크게 보기']");
+const fit = async () => {
+  await page.mouse.click(760, 960);
+  await page.keyboard.press("Shift+Digit1");
+  await page.waitForTimeout(700);
+};
 
-async function runAndWait(id, before) {
-  await node(id).getByRole("button", { name: /^실행$/ }).click();
+async function runAndWait(id, total, label = "실행") {
+  await node(id).getByRole("button", { name: new RegExp(`^(${label})$`) }).click();
   for (let i = 0; i < 60; i++) {
     await page.waitForTimeout(1000);
     const txt = (await node(id).innerText().catch(() => "")) ?? "";
     const m = txt.match(/지금까지 결과\s*(\d+)/);
-    if (m && Number(m[1]) > before && !/대기|생성 중|마무리/.test(txt)) return Number(m[1]);
+    if (m && Number(m[1]) >= total && !/대기|생성 중|마무리/.test(txt)) return Number(m[1]);
   }
   throw new Error(`${id} did not finish`);
+}
+
+async function drag(fromSel, toSel) {
+  const a = await page.locator(fromSel).boundingBox();
+  const b = await page.locator(toSel).boundingBox();
+  if (!a || !b) throw new Error(`handle not visible: ${!a ? fromSel : toSel}`);
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 14 });
+  await page.mouse.up();
+  await page.waitForTimeout(500);
 }
 
 try {
@@ -37,9 +54,9 @@ try {
   await page.getByRole("button", { name: "로그인" }).click();
   await page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 60000 });
 
-  const proj = await api("/api/projects", { method: "POST", body: { name: `결과모음 ${Date.now() % 10000}`, visibility: "team" } });
+  const proj = await api("/api/projects", { method: "POST", body: { name: `결과리스트 ${Date.now() % 10000}`, visibility: "team" } });
   const projectId = proj.item?.id ?? proj.project?.id ?? proj.id;
-  const cv = await api("/api/canvases", { method: "POST", body: { name: "결과 모음 테스트", projectId, template: "image-to-video" } });
+  const cv = await api("/api/canvases", { method: "POST", body: { name: "결과 리스트 테스트", projectId, template: "image-to-video" } });
   const canvasId = cv.item.id;
   ok(`canvas ${canvasId.slice(0, 8)}`);
 
@@ -47,87 +64,87 @@ try {
   await page.waitForLoadState("networkidle");
   await page.waitForTimeout(1500);
 
-  // 한 종류에 하나뿐이면 번호 없이
-  (await node("g1").innerText()).includes("이미지 생성") ? ok("gen node labelled") : fail("gen node label missing");
+  (await node("r1").innerText()).includes("아직 결과가 없어요") ? ok("template list waits for the video node's results") : fail("r1 empty state missing");
 
-  const a = await runAndWait("g1", 0);
-  const b = await runAndWait("g1", a);
-  const c = await runAndWait("v1", 0);
-  ok(`results per node: g1 ${a} → ${b}, v1 ${c}`);
+  // 이미지 생성 → 생성 노드의 "결과 리스트"로 새 리스트를 만들어 이어요
+  await runAndWait("g1", 1);
+  await node("g1").getByRole("button", { name: /결과 리스트/ }).click();
+  await page.waitForTimeout(1000);
+  const lists = await page.locator(".react-flow__node-results").evaluateAll((els) => els.map((e) => e.getAttribute("data-id")));
+  const r2 = lists.find((x) => x !== "r1");
+  r2 ? ok(`created a list for g1 (${r2})`) : fail(`no new list: ${lists}`);
+  (await tiles(r2).count()) === 1 ? ok("new list shows g1's first result") : fail(`r2 tiles ${await tiles(r2).count()}`);
 
-  // 결과 모음 열기
-  await page.getByRole("button", { name: /^결과/ }).click();
-  await page.waitForTimeout(900);
-  const count = await panel().locator("button[aria-label$='크게 보기']").count();
-  count === b + c ? ok(`panel lists all ${count} results`) : fail(`panel shows ${count}, expected ${b + c}`);
-  const runs = await panel().locator("ol > li").count();
-  runs === 3 ? ok("3 runs on the timeline") : fail(`runs ${runs}`);
-  await page.screenshot({ path: `${OUT}/canvas-results.png` });
+  // 한 번 더 돌리면 쌓여요
+  await fit();
+  await runAndWait("g1", 2);
+  await page.waitForTimeout(1500);
+  (await tiles(r2).count()) === 2 ? ok("second run stacks in the list") : fail(`r2 tiles after 2 runs: ${await tiles(r2).count()}`);
 
-  // 예전 실행 결과를 다음 노드로 (맨 아래 = g1 첫 실행)
-  const oldRun = panel().locator("ol > li").last();
-  const firstOld = oldRun.locator("div.group").first();
-  await firstOld.hover();
-  await firstOld.getByRole("button", { name: "이 결과를 다음 노드로 넘기기" }).click();
-  await page.waitForTimeout(600);
-  (await firstOld.innerText()).includes("다음 노드로") ? ok("old result is now passed to the next node") : fail("pick badge missing");
-  const nodeData = await page.evaluate(async (id) => {
-    const r = await fetch(`/api/canvases/${id}`);
-    return r.json();
-  }, canvasId);
-  void nodeData;
-
-  // OK 표시 → OK만
-  await firstOld.hover();
-  await firstOld.getByRole("button", { name: "OK" }).click();
-  await page.waitForTimeout(500);
-  await panel().getByRole("button", { name: "OK만" }).click();
-  await page.waitForTimeout(500);
-  const okCount = await panel().locator("button[aria-label$='크게 보기']").count();
-  okCount === 1 ? ok("OK filter shows the one marked result") : fail(`OK filter shows ${okCount}`);
-  await panel().getByRole("button", { name: "OK만" }).click();
-
-  // 이 노드 결과만
-  await panel().getByRole("button", { name: "이 노드 결과만 보기" }).first().click();
+  // 예전 결과(아래쪽)를 OK
+  const older = node(r2).locator("div.group").last();
+  await older.hover();
+  await older.getByRole("button", { name: "OK" }).click();
   await page.waitForTimeout(400);
-  const scoped = await panel().locator("button[aria-label$='크게 보기']").count();
-  scoped === c || scoped === b ? ok(`node filter shows ${scoped}`) : fail(`node filter shows ${scoped}`);
-  await panel().getByRole("button", { name: /결과만$/ }).click();
+  (await node(r2).innerText()).includes("OK 1") ? ok("OK shows in the list footer") : fail("OK count missing");
+  const okAsset = await older.getByRole("button", { name: /크게 보기$/ }).getAttribute("aria-label");
+
+  // 리스트의 OK 출력 → 영상 생성의 시작 프레임
+  await fit();
+  await drag(`.react-flow__node[data-id="${r2}"] .react-flow__handle[data-handleid="ok"]`, `.react-flow__node[data-id="v1"] .react-flow__handle[data-handleid="start"]`);
+  const edges = await page.locator(".react-flow__edge").count();
+  ok(`connected list → video start (edges ${edges})`);
+  await page.screenshot({ path: `${OUT}/canvas-list-connected.png` });
+
+  const v = await runAndWait("v1", 1);
+  await page.waitForTimeout(1500);
+  const res = await api(`/api/canvases/${canvasId}/results?limit=50`);
+  const lastVideo = res.items.find((g) => g.canvasNodeId === "v1");
+  const startAsset = res.items.flatMap((g) => g.outputs).find((o) => o.id === lastVideo?.inputs?.startFrame);
+  startAsset && okAsset?.startsWith(startAsset.filename) ? ok(`video used the OK'd image as its start frame (${startAsset.filename})`) : fail(`start frame ${lastVideo?.inputs?.startFrame} vs OK ${okAsset}`);
+  (await tiles("r1").count()) === v ? ok("video result landed in the template list") : fail(`r1 tiles ${await tiles("r1").count()}`);
+
+  // OK를 하나 더 → 영상 노드는 2번 돌아요
+  const newer = node(r2).locator("div.group").first();
+  await newer.hover();
+  await newer.getByRole("button", { name: "OK" }).click();
+  await page.waitForTimeout(500);
+  (await node("v1").getByRole("button", { name: "2번 실행" }).count()) === 1 ? ok("two OK images → video node runs twice") : fail("fan-out label missing");
+
+  // OK만 보기
+  await node(r2).getByRole("radio", { name: /^OK/ }).click();
+  await page.waitForTimeout(300);
+  (await tiles(r2).count()) === 2 ? ok("OK filter shows both OK results") : fail(`OK filter ${await tiles(r2).count()}`);
 
   // 캔버스에 꺼내기
   const inputs = ".react-flow__node-imageInput, .react-flow__node-videoInput";
   const before = await page.locator(inputs).count();
-  const tile = panel().locator("div.group").first();
-  await tile.hover();
-  await tile.getByRole("button", { name: /캔버스에 꺼내기/ }).click();
+  const t = node("r1").locator("div.group").first();
+  await t.hover();
+  await t.getByRole("button", { name: /캔버스에 꺼내기/ }).click();
   await page.waitForTimeout(900);
-  const after = await page.locator(inputs).count();
-  after === before + 1 ? ok("placed a result as an input node") : fail(`input nodes ${before} → ${after}`);
+  (await page.locator(inputs).count()) === before + 1 ? ok("placed a result as an input node") : fail("place failed");
 
-  // 크게 보기: 라이트박스에서 다음 결과로 넘어가는지
-  await panel().locator("button[aria-label$='크게 보기']").first().click();
+  // 크게 보기 → 다음
+  await fit();
+  await tiles(r2).first().click();
   await page.waitForTimeout(900);
   await page.keyboard.press("ArrowRight");
-  await page.waitForTimeout(600);
-  await page.screenshot({ path: `${OUT}/canvas-results-lightbox.png` });
+  await page.waitForTimeout(500);
   await page.keyboard.press("Escape");
   await page.waitForTimeout(400);
 
-  // 목록 보기
-  await panel().getByRole("radio", { name: "" }).last().click().catch(() => {});
-  await page.locator("[title='목록으로 보기']").click();
-  await page.waitForTimeout(500);
-  await page.screenshot({ path: `${OUT}/canvas-results-list.png` });
+  await fit();
+  await page.screenshot({ path: `${OUT}/canvas-list.png` });
 
-  // R로 닫기
-  await page.mouse.click(700, 900);
-  await page.keyboard.press("r");
-  await page.waitForTimeout(600);
-  (await panel().count()) === 0 ? ok("R closes the panel") : fail("panel still open after R");
-  await page.screenshot({ path: `${OUT}/canvas-after.png` });
+  // 다시 열어도 그대로
+  await page.reload();
+  await page.waitForLoadState("networkidle");
+  await page.waitForTimeout(2500);
+  (await tiles(r2).count()) === 2 && (await page.locator(".react-flow__node-results").count()) === 2 ? ok("lists survive a reload") : fail("lists lost after reload");
 } catch (e) {
   fail(e.message);
-  await page.screenshot({ path: `${OUT}/canvas-results-error.png` }).catch(() => {});
+  await page.screenshot({ path: `${OUT}/canvas-list-error.png` }).catch(() => {});
 }
 console.log(errors.length ? errors.join("\n") : "no page errors");
 await browser.close();
