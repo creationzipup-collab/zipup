@@ -1,9 +1,11 @@
 import "server-only";
 
+import { appDatabaseUrl } from "@/lib/db/url";
+
 /**
  * 서버 환경 변수. 값이 없을 때의 기본 동작:
  * - Higgsfield / fal 키가 없으면 해당 모델은 "모의(mock) 생성"으로 동작합니다(개발용).
- * - S3/R2 설정이 없으면 로컬 디스크(.data/storage)에 저장합니다.
+ * - 파일 저장소: S3_* 가 있으면 S3/R2, 없고 SUPABASE_* 가 있으면 Supabase Storage, 둘 다 없으면 로컬 디스크(.data/storage).
  */
 function str(name: string): string | undefined {
   const v = process.env[name];
@@ -22,11 +24,23 @@ function parseHiggsfieldCredentials() {
   return undefined;
 }
 
+function storageDriver(): "s3" | "supabase" | "local" {
+  const explicit = str("STORAGE_DRIVER");
+  if (explicit === "s3" || explicit === "supabase" || explicit === "local") return explicit;
+  if (str("S3_BUCKET")) return "s3";
+  if (supabaseUrl() && supabaseKey()) return "supabase";
+  return "local";
+}
+
+// Vercel의 Supabase 연동은 SUPABASE_URL과 SUPABASE_SERVICE_ROLE_KEY(또는 새 형식 SUPABASE_SECRET_KEY)를 넣어 줘요
+const supabaseUrl = () => (str("SUPABASE_URL") ?? str("NEXT_PUBLIC_SUPABASE_URL"))?.replace(/\/+$/, "");
+const supabaseKey = () => str("SUPABASE_SERVICE_ROLE_KEY") ?? str("SUPABASE_SECRET_KEY");
+
 const isProd = process.env.NODE_ENV === "production";
 
 export const env = {
   isProd,
-  databaseUrl: str("DATABASE_URL") ?? "postgresql://zipup:zipup@localhost:5432/zipup",
+  databaseUrl: appDatabaseUrl(process.env) ?? "postgresql://zipup:zipup@localhost:5432/zipup",
   authSecret:
     str("BETTER_AUTH_SECRET") ?? (isProd ? undefined : "dev-only-secret-change-me-please-0123456789"),
   appUrl: (str("APP_URL") ?? str("BETTER_AUTH_URL") ?? (str("VERCEL_PROJECT_PRODUCTION_URL") ? `https://${str("VERCEL_PROJECT_PRODUCTION_URL")}` : undefined) ?? "http://localhost:3000").replace(/\/$/, ""),
@@ -46,7 +60,7 @@ export const env = {
     queueUrl: (str("FAL_QUEUE_URL") ?? "https://queue.fal.run").replace(/\/$/, ""),
   },
   storage: {
-    driver: (str("STORAGE_DRIVER") ?? (str("S3_BUCKET") ? "s3" : "local")) as "s3" | "local",
+    driver: storageDriver(),
     localDir: str("LOCAL_STORAGE_DIR") ?? ".data/storage",
     s3: {
       endpoint: str("S3_ENDPOINT"),
@@ -55,6 +69,11 @@ export const env = {
       accessKeyId: str("S3_ACCESS_KEY_ID") ?? "",
       secretAccessKey: str("S3_SECRET_ACCESS_KEY") ?? "",
       forcePathStyle: str("S3_FORCE_PATH_STYLE") === "true",
+    },
+    supabase: {
+      url: supabaseUrl(),
+      key: supabaseKey(),
+      bucket: str("SUPABASE_BUCKET") ?? "zipup-ai",
     },
   },
   google: {

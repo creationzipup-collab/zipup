@@ -221,7 +221,7 @@ export async function providerInputUrl(
 ): Promise<string> {
   const s = storage();
   if (provider === "mock") return `mock-input://${a.storageKey}`;
-  if (s.kind === "s3") return s.signedGetUrl(a.storageKey, { expiresIn: 24 * 3600 });
+  if (s.kind !== "local") return s.signedGetUrl(a.storageKey, { expiresIn: 24 * 3600 });
   // 로컬 스토리지(개발): 공급자 스토리지에 올리거나 data URI로 전달
   const buf = await s.get(a.storageKey);
   if (provider === "higgsfield") {

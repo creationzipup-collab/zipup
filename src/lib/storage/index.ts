@@ -14,21 +14,10 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 import { env } from "@/lib/env";
 
-export type SignedUrlOptions = {
-  /** 다운로드 파일명 (Content-Disposition: attachment) */
-  downloadName?: string;
-  /** 유효 시간(초). 기본 2시간 (1시간 단위로 서명 시각을 고정해 브라우저 캐시가 유지됨) */
-  expiresIn?: number;
-};
+import { createSupabaseDriver } from "./supabase";
+import type { StorageDriver } from "./types";
 
-export interface StorageDriver {
-  kind: "s3" | "local";
-  put(key: string, body: Buffer, contentType: string): Promise<void>;
-  get(key: string): Promise<Buffer>;
-  delete(key: string): Promise<void>;
-  signedGetUrl(key: string, opts?: SignedUrlOptions): Promise<string>;
-  signedPutUrl(key: string, contentType: string, expiresIn?: number): Promise<{ url: string; headers: Record<string, string> }>;
-}
+export type { SignedUrlOptions, StorageDriver } from "./types";
 
 const HOUR = 3600;
 
@@ -90,7 +79,7 @@ function createS3Driver(): StorageDriver {
 
 /* ---------------------------------- Local --------------------------------- */
 
-// 로컬 저장소는 개발용. 경로가 동적이라 번들 추적에서 제외 (운영은 S3/R2 사용)
+// 로컬 저장소는 개발용. 경로가 동적이라 번들 추적에서 제외 (운영은 Supabase Storage 또는 S3/R2 사용)
 function localRoot(): string {
   return path.resolve(/*turbopackIgnore: true*/ process.cwd(), env.storage.localDir);
 }
@@ -155,11 +144,18 @@ let driver: StorageDriver | null = null;
 
 export function storage(): StorageDriver {
   if (!driver) {
-    if (env.storage.driver !== "s3" && process.env.VERCEL) {
+    const kind = env.storage.driver;
+    if (kind === "local" && process.env.VERCEL) {
       // Vercel 함수의 디스크는 읽기 전용·일회성이라 결과물을 보관할 수 없음
-      throw new Error("Vercel에서는 S3 호환 스토리지(Cloudflare R2) 설정이 필요해요. S3_BUCKET 등 환경 변수를 확인해 주세요.");
+      throw new Error("파일 저장소가 설정되지 않았어요. Supabase(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) 또는 R2(S3_*) 환경 변수를 확인해 주세요.");
     }
-    driver = env.storage.driver === "s3" ? createS3Driver() : createLocalDriver();
+    if (kind === "supabase") {
+      const { url, key, bucket } = env.storage.supabase;
+      if (!url || !key) throw new Error("SUPABASE_URL과 SUPABASE_SERVICE_ROLE_KEY가 필요해요.");
+      driver = createSupabaseDriver({ url, key, bucket });
+    } else {
+      driver = kind === "s3" ? createS3Driver() : createLocalDriver();
+    }
   }
   return driver;
 }
