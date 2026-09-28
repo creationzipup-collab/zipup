@@ -70,7 +70,7 @@ async function openaiChat(opts: ChatOptions): Promise<LlmResult> {
     delete body.response_format;
     res = await post(`${env.llm.baseUrl}/chat/completions`, body, { Authorization: `Bearer ${env.llm.apiKey}` });
   }
-  if (!res.ok) throw llmError(res.status, res.data);
+  if (!res.ok) throw llmError(res.status, res.data, "openai");
   const choice = (res.data.choices as { message?: { content?: string } }[] | undefined)?.[0];
   const usage = res.data.usage as { cost?: number } | undefined;
   return { text: choice?.message?.content ?? "", model, costUsd: typeof usage?.cost === "number" ? usage.cost : 0, provider: "openai" };
@@ -89,7 +89,7 @@ async function falChat(opts: ChatOptions): Promise<LlmResult> {
     },
     { Authorization: `Key ${env.fal.key}` },
   );
-  if (!res.ok) throw llmError(res.status, res.data);
+  if (!res.ok) throw llmError(res.status, res.data, "fal");
   if (typeof res.data.error === "string" && res.data.error) throw new HttpError(502, `LLM 오류: ${res.data.error}`, "llm_error");
   const usage = res.data.usage as { cost?: number } | undefined;
   return { text: String(res.data.output ?? ""), model, costUsd: typeof usage?.cost === "number" ? usage.cost : 0, provider: "fal" };
@@ -118,11 +118,12 @@ async function post(url: string, body: unknown, headers: Record<string, string>)
   return { ok: res.ok, status: res.status, data };
 }
 
-function llmError(status: number, data: Record<string, unknown>): HttpError {
+function llmError(status: number, data: Record<string, unknown>, provider: "openai" | "fal"): HttpError {
   const detail = typeof data.detail === "string" ? data.detail : typeof data.error === "string" ? data.error : JSON.stringify(data.error ?? data).slice(0, 200);
   if (status === 401) return new HttpError(502, "LLM API 키가 올바르지 않아요.", "llm_auth");
   if (status === 402 || status === 403) {
-    return new HttpError(402, /balance|credit|billing|exhausted/i.test(detail) ? "LLM 공급자 잔액이 부족해요. (fal.ai 충전 필요)" : `LLM 요청이 거부됐어요: ${detail}`, "llm_credits");
+    const credits = /balance|credit|billing|top[ _-]?up|exhausted|insufficient/i.test(detail);
+    return new HttpError(402, credits ? `LLM 공급자 잔액이 부족해요.${provider === "fal" ? " (fal.ai 충전 필요)" : ""}` : `LLM 요청이 거부됐어요: ${detail}`, "llm_credits");
   }
   if (status === 429) return new HttpError(429, "LLM 요청이 많아요. 잠시 후 다시 시도해 주세요.", "llm_rate");
   return new HttpError(502, `LLM 오류 (${status}): ${detail}`, "llm_error");

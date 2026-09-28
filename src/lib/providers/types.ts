@@ -96,7 +96,7 @@ export function mapHttpError(status: number, message: string): ProviderError {
   if (status === 400 && lower.includes("concurren")) return new ProviderError(message, "concurrency", status, true);
   if (status === 401) return new ProviderError("API 인증에 실패했어요. 키를 확인해 주세요.", "auth", status);
   if (status === 402 || status === 403) {
-    if (/balance|credit|billing|top up|exhausted|insufficient/i.test(message)) {
+    if (/balance|credit|billing|top[ _-]?up|exhausted|insufficient/i.test(message)) {
       return new ProviderError("공급자 계정의 잔액(크레딧)이 부족해요. 관리자가 공급자 결제 페이지에서 충전해야 해요.", "credits", status);
     }
     return new ProviderError(message ? `공급자가 요청을 거부했어요: ${message}` : "공급자가 요청을 거부했어요. (권한 또는 잔액 확인)", "credits", status);
