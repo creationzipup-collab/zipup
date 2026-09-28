@@ -309,7 +309,7 @@ export const SEARCH_HELP: { syntax: string; desc: string }[] = [
   { syntax: '"red dress"', desc: "정확한 구문" },
   { syntax: "-흐림", desc: "제외할 단어" },
   { syntax: "#인물", desc: "태그" },
-  { syntax: "@홍길동", desc: "만든 사람" },
+  { syntax: "@홍길동", desc: "만든 사람 (@나 = 내 것)" },
   { syntax: "model:seedream", desc: "모델 (시드림, 나노바나나, gpt, h3, 시댄스)" },
   { syntax: "project:신제품", desc: "프로젝트 이름" },
   { syntax: "is:video · is:pick · is:fav", desc: "영상 / 셀렉 / 즐겨찾기" },

@@ -20,6 +20,7 @@ const Patch = z.object({
   prompt: z.string().trim().min(1).max(5000).optional(),
   tags: z.array(z.string().trim().min(1).max(30)).max(10).optional(),
   visibility: z.enum(["private", "team", "company"]).optional(),
+  kind: z.enum(["image", "video", "any"]).optional(),
   used: z.boolean().optional(),
 });
 

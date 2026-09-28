@@ -48,7 +48,8 @@ function max(a: AccessLevel, b: AccessLevel): AccessLevel {
 
 /** 목록 조회용: 사용자가 볼 수 있는 프로젝트 조건 */
 export function visibleProjectsWhere(u: Viewer): SQL {
-  if (u.role === "admin") return sql`true`;
+  // 관리자도 목록에서는 다른 사람의 개인 작업공간을 보지 않음 (링크로 직접 열 수는 있음)
+  if (u.role === "admin") return or(eq(projects.isPersonal, false), eq(projects.ownerId, u.id))!;
   const member = exists(
     db
       .select({ one: sql`1` })
@@ -110,7 +111,17 @@ export async function ensurePersonalProject(u: Pick<CurrentUser, "id" | "teamId"
       isPersonal: true,
       icon: "sparkles",
     })
+    .onConflictDoNothing()
     .returning();
+  if (!created) {
+    // 동시에 다른 요청이 먼저 만든 경우
+    const [row] = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.ownerId, u.id), eq(projects.isPersonal, true), isNull(projects.archivedAt)))
+      .limit(1);
+    return row;
+  }
   await db.insert(projectMembers).values({ projectId: created.id, userId: u.id, role: "owner" }).onConflictDoNothing();
   return created;
 }

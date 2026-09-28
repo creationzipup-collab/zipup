@@ -6,7 +6,7 @@ import { hashPassword } from "better-auth/crypto";
 import { and, asc, count, desc, eq, gte, ilike, inArray, isNull, lt, or, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { account, assets, auditLogs, generations, session, teams, user } from "@/lib/db/schema";
+import { account, assets, auditLogs, generations, projects, session, teams, user } from "@/lib/db/schema";
 import { badRequest, notFound } from "@/lib/errors";
 import { getModel } from "@/lib/models/registry";
 import { monthStartKst } from "@/lib/money";
@@ -115,7 +115,7 @@ export async function listUsers(opts: { status?: UserStatus | "all"; q?: string 
       teamName: teams.name,
       teamColor: teams.color,
       requestedTeamName: sql<string | null>`(select name from ${teams} rt where rt.id = ${user.requestedTeamId})`,
-      monthSpend: sql<number>`(select coalesce(sum(coalesce(g.cost_micros, g.estimated_cost_micros)), 0)::bigint from ${generations} g where g.user_id = ${user.id} and g.created_at >= ${since} and g.status not in ('failed','nsfw','canceled'))`,
+      monthSpend: sql<number>`(select coalesce(sum(coalesce(g.cost_micros, g.estimated_cost_micros)), 0)::bigint from ${generations} g where g.user_id = ${user.id} and g.created_at >= ${since.toISOString()}::timestamptz and g.status not in ('failed','nsfw','canceled'))`,
       generationCount: sql<number>`(select count(*)::int from ${generations} g where g.user_id = ${user.id})`,
     })
     .from(user)
@@ -232,9 +232,21 @@ export async function deleteUserAdmin(admin: CurrentUser, userId: string) {
   if (userId === admin.id) throw badRequest("자기 자신은 삭제할 수 없어요.");
   const [target] = await db.select().from(user).where(eq(user.id, userId));
   if (!target) throw notFound();
-  const [{ value }] = await db.select({ value: count() }).from(generations).where(eq(generations.userId, userId));
-  if (value > 0) throw badRequest("생성 기록이 있는 사용자는 삭제 대신 '정지'해 주세요.");
-  await db.delete(user).where(eq(user.id, userId));
+  const [usage] = await db.execute<{ n: number }>(sql`
+    select (
+      (select count(*) from ${generations} where user_id = ${userId}) +
+      (select count(*) from ${assets} where user_id = ${userId}) +
+      (select count(*) from comments where user_id = ${userId}) +
+      (select count(*) from collections where created_by = ${userId}) +
+      (select count(*) from canvases where created_by = ${userId}) +
+      (select count(*) from ${projects} where owner_id = ${userId} and is_personal = false)
+    )::int as n`);
+  if (Number(usage?.n ?? 0) > 0) throw badRequest("작업 기록이 있는 사용자는 삭제 대신 '정지'해 주세요.");
+  await db.transaction(async (tx) => {
+    // 빈 개인 작업공간은 함께 정리
+    await tx.delete(projects).where(and(eq(projects.ownerId, userId), eq(projects.isPersonal, true)));
+    await tx.delete(user).where(eq(user.id, userId));
+  });
   await audit(admin.id, "user.delete", { type: "user", id: userId }, { email: target.email });
 }
 
@@ -245,13 +257,16 @@ export async function listTeamsAdmin() {
   const rows = await db
     .select({
       t: teams,
-      members: sql<number>`(select count(*)::int from ${user} u where u.team_id = ${teams.id} and u.status = 'active')`,
-      monthSpend: sql<number>`(select coalesce(sum(coalesce(g.cost_micros, g.estimated_cost_micros)), 0)::bigint from ${generations} g where g.team_id = ${teams.id} and g.created_at >= ${since} and g.status not in ('failed','nsfw','canceled'))`,
+      // 단일 테이블 select에서는 drizzle이 컬럼을 테이블명 없이 렌더링하므로 서브쿼리에서는 "teams"."id"로 명시
+      members: sql<number>`(select count(*)::int from ${user} u where u.team_id = "teams"."id" and u.status = 'active')`,
+      monthSpend: sql<number>`(select coalesce(sum(coalesce(g.cost_micros, g.estimated_cost_micros)), 0)::bigint from ${generations} g where g.team_id = "teams"."id" and g.created_at >= ${since.toISOString()}::timestamptz and g.status not in ('failed','nsfw','canceled'))`,
     })
     .from(teams)
     .orderBy(asc(teams.sortOrder), asc(teams.name));
   return rows.map((r) => ({ ...r.t, createdAt: r.t.createdAt.toISOString(), updatedAt: r.t.updatedAt.toISOString(), members: r.members, monthSpend: Number(r.monthSpend) }));
 }
+
+export type TeamAdminRow = Awaited<ReturnType<typeof listTeamsAdmin>>[number];
 
 export async function upsertTeam(admin: CurrentUser, input: { id?: string; name: string; color?: string; description?: string | null; monthlyBudgetMicros?: number | null }) {
   const slug =
@@ -283,16 +298,57 @@ export async function deleteTeam(admin: CurrentUser, id: string) {
   await audit(admin.id, "team.delete", { type: "team", id });
 }
 
+/* ---------------------------------- 모델 ---------------------------------- */
+
+/** 이번 달(KST) 모델별 생성 수·사용 금액 */
+export async function modelUsageThisMonth(): Promise<Record<string, { count: number; spend: number; failed: number }>> {
+  const rows = await db
+    .select({
+      modelId: generations.modelId,
+      count: sql<number>`count(*)::int`,
+      failed: sql<number>`count(*) filter (where ${generations.status} in ('failed','nsfw'))::int`,
+      spend,
+    })
+    .from(generations)
+    .where(gte(generations.createdAt, monthStartKst()))
+    .groupBy(generations.modelId);
+  return Object.fromEntries(rows.map((r) => [r.modelId, { count: r.count, spend: Number(r.spend), failed: r.failed }]));
+}
+
 /* -------------------------------- 감사 로그 -------------------------------- */
 
-export async function listAudit(limit = 200) {
-  return db
-    .select({ id: auditLogs.id, action: auditLogs.action, targetType: auditLogs.targetType, targetId: auditLogs.targetId, meta: auditLogs.meta, createdAt: auditLogs.createdAt, actorName: user.name })
+export const AUDIT_CATEGORIES = ["user", "team", "project", "assets", "model", "settings"] as const;
+export type AuditCategory = (typeof AUDIT_CATEGORIES)[number];
+
+export async function listAudit(opts: { limit?: number; category?: AuditCategory | null; before?: Date | null } = {}) {
+  const conds = [];
+  if (opts.category) conds.push(ilike(auditLogs.action, `${opts.category}.%`));
+  if (opts.before) conds.push(lt(auditLogs.createdAt, opts.before));
+  const rows = await db
+    .select({
+      id: auditLogs.id,
+      action: auditLogs.action,
+      targetType: auditLogs.targetType,
+      targetId: auditLogs.targetId,
+      meta: auditLogs.meta,
+      createdAt: auditLogs.createdAt,
+      actorName: user.name,
+      actorImage: user.image,
+      targetName: sql<string | null>`case ${auditLogs.targetType}
+        when 'user' then (select u2.name from ${user} u2 where u2.id = ${auditLogs.targetId})
+        when 'team' then (select t2.name from ${teams} t2 where t2.id::text = ${auditLogs.targetId})
+        when 'project' then (select p2.name from ${projects} p2 where p2.id::text = ${auditLogs.targetId})
+        else null end`,
+    })
     .from(auditLogs)
     .leftJoin(user, eq(user.id, auditLogs.actorId))
+    .where(conds.length ? and(...conds) : undefined)
     .orderBy(desc(auditLogs.createdAt))
-    .limit(limit);
+    .limit(opts.limit ?? 100);
+  return rows;
 }
+
+export type AuditRow = Awaited<ReturnType<typeof listAudit>>[number];
 
 /** 최근 실패 작업 */
 export async function recentFailures(limit = 10) {

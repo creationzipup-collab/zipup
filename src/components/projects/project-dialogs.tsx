@@ -96,13 +96,15 @@ export function ProjectFormDialog({
   });
   const [members, setMembers] = React.useState<string[]>([]);
   const [loading, setLoading] = React.useState(false);
-  React.useEffect(() => {
+  // 열 때마다 폼 초기화
+  const [wasOpen, setWasOpen] = React.useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
     if (open) {
-      setV({ name: "", description: "", visibility: "team", color: PROJECT_COLORS[Math.floor(Math.random() * 6)], teamId: null, ...initial });
+      setV({ name: "", description: "", visibility: "team", color: randomProjectColor(), teamId: null, ...initial });
       setMembers([]);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }
 
   async function submit() {
     setLoading(true);
@@ -320,4 +322,8 @@ export function MembersDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function randomProjectColor(): string {
+  return PROJECT_COLORS[Math.floor(Math.random() * 6)];
 }

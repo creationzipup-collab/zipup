@@ -31,6 +31,11 @@ export function errorResponse(err: unknown): Response {
     const digest = (err as { digest: string }).digest;
     if (digest.startsWith("NEXT_")) throw err;
   }
+  // Postgres 고유 제약 위반 (Drizzle은 원본 오류를 cause에 담아 던짐)
+  const pg = (err as { code?: string; cause?: { code?: string } } | null) ?? null;
+  if (pg?.code === "23505" || pg?.cause?.code === "23505") {
+    return NextResponse.json({ error: "같은 이름이 이미 있어요. 다른 이름을 써 주세요.", code: "conflict" }, { status: 409 });
+  }
   console.error("[api] unexpected error", err);
   return NextResponse.json({ error: "서버 오류가 발생했어요. 잠시 후 다시 시도해 주세요." }, { status: 500 });
 }

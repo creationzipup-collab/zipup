@@ -12,6 +12,8 @@ export type ModelStatus = {
   /** 실제 동작 공급자 (null = 키 없음) */
   provider: "higgsfield" | "fal" | "mock" | null;
   priceOverrides: Record<string, number>;
+  /** 관리자 공지 (예: "이번 주 프로모션 단가") */
+  notes?: string | null;
 };
 
 export function ModelSwatch({ model, className }: { model: Pick<ModelDef, "gradient" | "vendor">; className?: string }) {

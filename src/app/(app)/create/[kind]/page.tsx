@@ -28,7 +28,7 @@ export default async function CreatePage({
   ]);
   return (
     <Studio
-      key={`${kind}-${sp.from ?? ""}-${sp.ref ?? ""}-${sp.start ?? ""}`}
+      key={`${kind}-${sp.from ?? ""}-${sp.ref ?? ""}-${sp.start ?? ""}-${sp.preset ?? ""}`}
       kind={kind}
       status={status}
       projects={projects}

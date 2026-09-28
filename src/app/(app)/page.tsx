@@ -56,8 +56,7 @@ export default async function HomePage() {
     }),
   );
 
-  const hour = new Date(Date.now() + 9 * 3600_000).getUTCHours();
-  const greet = hour < 6 ? "늦은 밤이에요" : hour < 12 ? "좋은 아침이에요" : hour < 18 ? "좋은 오후예요" : "좋은 저녁이에요";
+  const greet = kstGreeting();
 
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-12 px-4 py-8 sm:px-8 sm:py-10">
@@ -211,4 +210,10 @@ function QuickCard({ href, icon, title, desc, gradient }: { href: string; icon: 
       <ArrowUpRight className="relative size-4 text-fg-3 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-fg" />
     </Link>
   );
+}
+
+/** 한국 시간 기준 인사말 */
+function kstGreeting(): string {
+  const hour = new Date(Date.now() + 9 * 3600_000).getUTCHours();
+  return hour < 6 ? "늦은 밤이에요" : hour < 12 ? "좋은 아침이에요" : hour < 18 ? "좋은 오후예요" : "좋은 저녁이에요";
 }

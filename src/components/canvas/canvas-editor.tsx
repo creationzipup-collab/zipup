@@ -48,7 +48,7 @@ import { Kbd } from "@/components/ui/misc";
 import { createGenerationRequest, useActiveGenerations, usePushGenerations, type GenerationDTO } from "@/lib/client/generations";
 import { defaultParams, getModel, sanitizeParams } from "@/lib/models/registry";
 import { TERMINAL_STATUSES } from "@/lib/types";
-import { cn, fetchJson, usd } from "@/lib/utils";
+import { cn, fetchJson, randomId, usd } from "@/lib/utils";
 
 import { CanvasContext, portType, type AssetInputData, type GenData, type PromptData } from "./canvas-context";
 import { NODE_TYPES } from "./nodes";
@@ -100,10 +100,13 @@ function Editor({
   const [picker, setPicker] = React.useState<{ nodeId: string; kind: "image" | "video" } | null>(null);
   const [lightbox, setLightbox] = React.useState<LightboxItem | null>(null);
   const [runningAll, setRunningAll] = React.useState(false);
+  // 비동기 콜백(자동 저장·전체 실행)에서 최신 그래프를 읽기 위한 참조
   const nodesRef = React.useRef(nodes);
-  nodesRef.current = nodes;
   const edgesRef = React.useRef(edges);
-  edgesRef.current = edges;
+  React.useLayoutEffect(() => {
+    nodesRef.current = nodes;
+    edgesRef.current = edges;
+  }, [nodes, edges]);
 
   /* ------------------------------- 자동 저장 ------------------------------- */
   const first = React.useRef(true);
@@ -113,6 +116,8 @@ function Editor({
       return;
     }
     if (!canEdit) return;
+    // 디바운스 저장 대기 표시 (저장 자체는 아래 타이머에서)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSaveState("saving");
     const t = setTimeout(async () => {
       try {
@@ -316,7 +321,7 @@ function Editor({
   function addNode(type: string, position?: { x: number; y: number }) {
     const def = PALETTE.find((p) => p.type === type)!;
     const center = position ?? rf.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
-    const id = `${type}-${Math.random().toString(36).slice(2, 8)}`;
+    const id = `${type}-${randomId()}`;
     setNodes((ns) => [
       ...ns.map((n) => ({ ...n, selected: false })),
       { id, type, position: { x: center.x - 150, y: center.y - 80 }, data: structuredClone(def.data) as Record<string, unknown>, selected: true, ...("style" in def ? { style: def.style } : {}) },
@@ -378,7 +383,7 @@ function Editor({
             if (type) addNode(type, { x: pos.x + 150, y: pos.y + 80 });
             else if (asset) {
               const a = JSON.parse(asset) as RefAsset;
-              const id = `${a.kind}Input-${Math.random().toString(36).slice(2, 8)}`;
+              const id = `${a.kind}Input-${randomId()}`;
               setNodes((ns) => [...ns, { id, type: a.kind === "image" ? "imageInput" : "videoInput", position: pos, data: { asset: a } }]);
             }
           }}

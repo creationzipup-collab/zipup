@@ -134,12 +134,14 @@ export function SavePromptDialog({
   const [visibility, setVisibility] = React.useState<Visibility>("team");
   const [withSettings, setWithSettings] = React.useState(true);
   const [loading, setLoading] = React.useState(false);
-  React.useEffect(() => {
+  const [wasOpen, setWasOpen] = React.useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
     if (open) {
       setText(prompt);
       setTitle(prompt.slice(0, 30));
     }
-  }, [open, prompt]);
+  }
   async function save() {
     setLoading(true);
     try {

@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "projects_one_personal_per_owner" ON "projects" USING btree ("owner_id") WHERE "projects"."is_personal" = true and "projects"."archived_at" is null;

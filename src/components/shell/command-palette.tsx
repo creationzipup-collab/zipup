@@ -54,9 +54,12 @@ export function CommandPalette({ open, onOpenChange, isAdmin }: { open: boolean;
     staleTime: 10_000,
   });
 
-  React.useEffect(() => {
+  // 닫히면 검색어 초기화
+  const [wasOpen, setWasOpen] = React.useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
     if (!open) setQ("");
-  }, [open]);
+  }
 
   const go = (href: string) => {
     onOpenChange(false);

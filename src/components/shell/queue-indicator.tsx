@@ -2,6 +2,7 @@
 
 import { CircleCheck, CircleX, Layers, ShieldAlert, X } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -19,6 +20,7 @@ import { GENERATION_STATUS_LABEL } from "@/lib/types";
 import { cn, usd } from "@/lib/utils";
 
 export function QueueIndicator() {
+  const router = useRouter();
   const { data = [], refetch } = useActiveGenerations();
   const active = data.filter(isActive);
   const prev = React.useRef<Map<string, string>>(new Map());
@@ -32,7 +34,7 @@ export function QueueIndicator() {
         if (g.status === "completed") {
           toast.success(`${model?.shortName ?? g.modelId} 완성`, {
             description: g.prompt.slice(0, 60) || undefined,
-            action: g.outputs[0] ? { label: "보기", onClick: () => (window.location.href = `/library?asset=${g.outputs[0].id}`) } : undefined,
+            action: g.outputs[0] ? { label: "보기", onClick: () => router.push(`/library?asset=${g.outputs[0].id}`) } : undefined,
           });
         } else if (g.status === "failed" || g.status === "nsfw") {
           toast.error(`${model?.shortName ?? g.modelId} ${g.status === "nsfw" ? "차단됨" : "실패"}`, {
@@ -42,7 +44,7 @@ export function QueueIndicator() {
       }
     }
     prev.current = new Map(data.map((g) => [g.id, g.status]));
-  }, [data]);
+  }, [data, router]);
 
   return (
     <Popover>

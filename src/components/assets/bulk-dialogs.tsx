@@ -43,9 +43,11 @@ export function TagDialog({
     queryFn: () => fetchJson<{ tags: { name: string; count: number }[] }>("/api/directory"),
     enabled: open,
   });
-  React.useEffect(() => {
+  const [wasOpen, setWasOpen] = React.useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
     if (open) setValue("");
-  }, [open]);
+  }
   const names = value.split(/[,\s]+/).map((t) => t.replace(/^#/, "").trim()).filter(Boolean);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -174,11 +176,10 @@ export function CollectionDialog({
     enabled: open,
   });
   const [name, setName] = React.useState("");
-  const [projectId, setProjectId] = React.useState<string>(defaultProjectId ?? "");
+  const [pickedProjectId, setProjectId] = React.useState<string>("");
   const editable = projects.filter((p) => p.access === "owner" || p.access === "editor");
-  React.useEffect(() => {
-    if (open && !projectId) setProjectId(defaultProjectId ?? editable.find((p) => !p.isPersonal)?.id ?? editable[0]?.id ?? "");
-  }, [open, projectId, defaultProjectId, editable]);
+  // 고르지 않았으면 기본 프로젝트 → 첫 공유 프로젝트 → 개인 작업공간 순
+  const projectId = pickedProjectId || defaultProjectId || editable.find((p) => !p.isPersonal)?.id || editable[0]?.id || "";
 
   async function addTo(id: string) {
     try {

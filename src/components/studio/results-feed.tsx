@@ -27,6 +27,7 @@ import { Dialog, DialogBody, DialogContent, DialogFooter } from "@/components/ui
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, Tip } from "@/components/ui/menu";
 import { EmptyState, TimeAgo } from "@/components/ui/misc";
 import { downloadUrl, downloadZip, useAssetMutations } from "@/lib/client/assets";
+import { useNow } from "@/lib/client/use-now";
 import { cancelGenerationRequest, isActive, usePushGenerations, type GenerationDTO } from "@/lib/client/generations";
 import { getModel, seedanceTokens } from "@/lib/models/registry";
 import { GENERATION_STATUS_LABEL } from "@/lib/types";
@@ -379,17 +380,20 @@ function TileButton({ label, onClick, children }: { label: string; onClick: () =
 }
 
 function Elapsed({ since }: { since: string }) {
-  const [now, setNow] = React.useState(() => Date.now());
-  React.useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
+  const now = useNow(1000);
+  if (!now) return null;
   const s = Math.max(0, Math.round((now - new Date(since).getTime()) / 1000));
-  return <span suppressHydrationWarning>{s < 60 ? `${s}초` : `${Math.floor(s / 60)}분 ${s % 60}초`}</span>;
+  return <span>{s < 60 ? `${s}초` : `${Math.floor(s / 60)}분 ${s % 60}초`}</span>;
+}
+
+/** Seedance 프로모션(30% 할인) 기간 */
+function seedancePromoActive(): boolean {
+  return Date.now() < new Date("2026-10-01T00:00:00Z").getTime();
 }
 
 function PendingTile({ g, ratio }: { g: GenerationDTO; ratio: string }) {
   const failed = g.status === "failed" || g.status === "nsfw" || g.status === "canceled";
+  const now = useNow(1000);
   return (
     <div
       className={cn("relative overflow-hidden rounded-2xl border", failed ? "border-danger/25 bg-danger/[0.04]" : "generating border-line")}
@@ -411,7 +415,7 @@ function PendingTile({ g, ratio }: { g: GenerationDTO; ratio: string }) {
             <span className="font-mono text-[11px] text-fg-4">
               <Elapsed since={g.startedAt ?? g.createdAt} />
             </span>
-            {g.status === "pending" && Date.now() - new Date(g.createdAt).getTime() > 8000 && (
+            {g.status === "pending" && now > 0 && now - new Date(g.createdAt).getTime() > 8000 && (
               <span className="text-[11px] text-fg-4">동시 실행 한도로 잠시 대기 중이에요</span>
             )}
           </>
@@ -440,7 +444,7 @@ export function FinalizeDialog({
   const g = generations.find((x) => x.id === generationId);
   const duration = typeof g?.params.duration === "number" ? g.params.duration : 5;
   const per1k = status["seedance-2-5"]?.priceOverrides?.per1kTokens ?? 0.0214;
-  const promo = Date.now() < new Date("2026-10-01T00:00:00Z").getTime() ? (status["seedance-2-5"]?.priceOverrides?.promoMultiplier ?? 0.7) : 1;
+  const promo = seedancePromoActive() ? (status["seedance-2-5"]?.priceOverrides?.promoMultiplier ?? 0.7) : 1;
   const draftSeconds = g?.outputs[0]?.durationSec ?? duration;
   const keepCost = (seedanceTokens("720p", draftSeconds * 2) / 1000) * per1k * promo;
   const regenCost = (seedanceTokens("720p", duration) / 1000) * per1k * promo;

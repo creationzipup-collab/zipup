@@ -36,15 +36,22 @@ export function Providers({ children }: { children: React.ReactNode }) {
 }
 
 /** 테마 전환 (쿠키에 저장 → 서버 렌더에서 바로 적용) */
+function subscribeTheme(onChange: () => void) {
+  const mo = new MutationObserver(onChange);
+  mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  return () => mo.disconnect();
+}
+
 export function useTheme() {
-  const [theme, setThemeState] = React.useState<"dark" | "light">("dark");
-  React.useEffect(() => {
-    setThemeState(document.documentElement.dataset.theme === "light" ? "light" : "dark");
-  }, []);
+  // <html data-theme>을 외부 상태로 구독 (여러 컴포넌트가 같은 값을 봄)
+  const theme = React.useSyncExternalStore(
+    subscribeTheme,
+    () => (document.documentElement.dataset.theme === "light" ? "light" : "dark"),
+    () => "dark" as const,
+  );
   const setTheme = React.useCallback((t: "dark" | "light") => {
     document.documentElement.dataset.theme = t;
     document.cookie = `zipup-theme=${t}; path=/; max-age=31536000; samesite=lax`;
-    setThemeState(t);
   }, []);
   return { theme, setTheme, toggle: () => setTheme(theme === "dark" ? "light" : "dark") };
 }

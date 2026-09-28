@@ -1,7 +1,7 @@
 "use client";
 
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkPlus, BookText, FolderKanban, Minus, Plus, Sparkles, Wand2 } from "lucide-react";
+import { BookmarkPlus, BookText, FolderKanban, Megaphone, Minus, Plus, Sparkles, Wand2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 import { toast } from "sonner";
@@ -89,7 +89,8 @@ export function Studio({
   const promptRef = React.useRef<HTMLTextAreaElement>(null);
   const hydrated = React.useRef(false);
 
-  // 이전 설정 복원 (프리필이 없을 때)
+  // 이전 설정 복원 (프리필이 없을 때). localStorage는 마운트 후에만 읽을 수 있어 effect에서 처리
+  /* eslint-disable react-hooks/set-state-in-effect */
   React.useEffect(() => {
     if (hydrated.current) return;
     hydrated.current = true;
@@ -100,6 +101,7 @@ export function Studio({
     if (!prefill.projectId && s.projectId && projects.some((p) => p.id === s.projectId)) setProjectId(s.projectId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const model = models.find((m) => m.id === modelId) ?? models[0];
   const params = React.useMemo(
@@ -115,16 +117,18 @@ export function Studio({
     } catch {}
   }, [kind, modelId, paramsByModel, count, projectId]);
 
-  // 슬롯이 사라지면 입력 정리
-  React.useEffect(() => {
+  // 모델·작업 종류가 바뀌어 슬롯이 사라지면 입력 정리
+  const slotKey = `${model.id}:${String(params.task ?? "")}`;
+  const [prevSlotKey, setPrevSlotKey] = React.useState(slotKey);
+  if (prevSlotKey !== slotKey) {
+    setPrevSlotKey(slotKey);
     setInputs((v) => ({
       images: slots.images ? v.images.slice(0, slots.images.max) : [],
       videos: slots.videos ? v.videos.slice(0, slots.videos.max) : [],
       startFrame: slots.startFrame ? v.startFrame : undefined,
       endFrame: slots.endFrame ? v.endFrame : undefined,
     }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [model.id, params.task]);
+  }
 
   const effectiveCount = Math.min(count, model.count.max);
   const perRequest = model.count.native ? [effectiveCount] : Array.from({ length: effectiveCount }, () => 1);
@@ -258,6 +262,12 @@ export function Studio({
             status={status}
             onChange={(m) => setModelId(m.id)}
           />
+          {st?.notes && (
+            <p className="-mt-3 flex gap-2 rounded-xl border border-info/25 bg-info/8 px-3 py-2 text-[12px] leading-relaxed text-fg-2">
+              <Megaphone className="mt-0.5 size-3.5 shrink-0 text-info" />
+              {st.notes}
+            </p>
+          )}
 
           {/* 프롬프트 */}
           <div className="flex flex-col gap-2">

@@ -45,9 +45,12 @@ export function AssetPicker({
     const t = setTimeout(() => setDq(q), 250);
     return () => clearTimeout(t);
   }, [q]);
-  React.useEffect(() => {
+  // 열 때마다 선택 초기화
+  const [wasOpen, setWasOpen] = React.useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
     if (open) setSelected([]);
-  }, [open]);
+  }
 
   const query = useInfiniteQuery({
     queryKey: ["asset-picker", kind, dq, scope, projectId],

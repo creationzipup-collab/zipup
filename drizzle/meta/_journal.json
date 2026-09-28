@@ -8,6 +8,13 @@
       "when": 1790564013438,
       "tag": "0000_small_king_cobra",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790568098951,
+      "tag": "0001_milky_blacklash",
+      "breakpoints": true
     }
   ]
 }

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { useNow } from "@/lib/client/use-now";
 import { avatarColor, cn, initials, timeAgo } from "@/lib/utils";
 
 export function Badge({
@@ -105,15 +106,10 @@ export function EmptyState({
 
 /** 상대 시간 (하이드레이션 불일치 방지) */
 export function TimeAgo({ date, className }: { date: string | Date; className?: string }) {
-  const [text, setText] = React.useState(() => timeAgo(date));
-  React.useEffect(() => {
-    setText(timeAgo(date));
-    const t = setInterval(() => setText(timeAgo(date)), 30_000);
-    return () => clearInterval(t);
-  }, [date]);
+  useNow(30_000); // 30초마다 다시 그림
   return (
     <time suppressHydrationWarning dateTime={new Date(date).toISOString()} className={className}>
-      {text}
+      {timeAgo(date)}
     </time>
   );
 }

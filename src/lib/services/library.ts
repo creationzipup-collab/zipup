@@ -133,7 +133,11 @@ export async function searchAssets(u: CurrentUser, f: AssetFilters) {
       ),
     );
   }
-  for (const name of pq.users) conds.push(or(ilike(user.name, like(name)), ilike(user.email, like(name))));
+  for (const name of pq.users) {
+    // @나 · @me → 내가 만든 것
+    if (name === "나" || name.toLowerCase() === "me") conds.push(eq(assets.userId, u.id));
+    else conds.push(or(ilike(user.name, like(name)), ilike(user.email, like(name))));
+  }
   for (const name of pq.teams) conds.push(ilike(teams.name, like(name)));
   for (const name of pq.projects) conds.push(ilike(projects.name, like(name)));
   if (pq.after) conds.push(gte(assets.createdAt, pq.after));

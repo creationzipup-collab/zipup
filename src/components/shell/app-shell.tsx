@@ -52,6 +52,8 @@ export type ShellUser = {
   role: UserRole;
   teamName: string | null;
   teamColor: string | null;
+  /** 관리자에게만: 가입 승인 대기 인원 */
+  pendingApprovals?: number;
 };
 
 type ShellCtx = { user: ShellUser; budget: BudgetStatus; mockMode: boolean; openPalette: () => void };
@@ -90,7 +92,12 @@ export function AppShell({
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const pathname = usePathname();
 
-  React.useEffect(() => setNavOpen(false), [pathname]);
+  // 페이지를 옮기면 모바일 메뉴 닫기
+  const [prevPath, setPrevPath] = React.useState(pathname);
+  if (prevPath !== pathname) {
+    setPrevPath(pathname);
+    setNavOpen(false);
+  }
 
   // 전역 단축키: ⌘K / Ctrl+K, "/" → 검색
   React.useEffect(() => {
@@ -251,6 +258,14 @@ function SidebarInner({
             {isActive("/admin") && <span className="absolute -left-3 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-accent" />}
             <ShieldCheck className="size-[17px] text-fg-4 group-hover:text-fg-2" strokeWidth={1.8} />
             관리자
+            {!!user.pendingApprovals && (
+              <span
+                className="ml-auto inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[10.5px] font-semibold tabular-nums text-[#0a0a0a]"
+                title={`승인 대기 ${user.pendingApprovals}명`}
+              >
+                {user.pendingApprovals}
+              </span>
+            )}
           </Link>
         )}
       </nav>

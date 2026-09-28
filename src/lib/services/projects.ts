@@ -184,7 +184,7 @@ export async function projectOverview(u: CurrentUser, id: string) {
       name: collections.name,
       description: collections.description,
       updatedAt: collections.updatedAt,
-      count: sql<number>`(select count(*)::int from collection_items ci where ci.collection_id = ${collections.id})`,
+      count: sql<number>`(select count(*)::int from collection_items ci where ci.collection_id = "collections"."id")`,
     })
     .from(collections)
     .where(eq(collections.projectId, id))

@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/controls";
 import { EmptyState, TimeAgo } from "@/components/ui/misc";
 import type { ProjectListItem } from "@/lib/services/projects";
-import { VISIBILITY_LABEL } from "@/lib/types";
+import { type Visibility, VISIBILITY_LABEL } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const VIS_ICON = { private: Lock, team: Users, company: Globe } as const;
@@ -23,6 +23,7 @@ export function ProjectsView({
   canCreate,
   canChooseTeam,
   myTeamId,
+  defaultVisibility,
 }: {
   items: ProjectListItem[];
   archived: boolean;
@@ -30,6 +31,7 @@ export function ProjectsView({
   canCreate: boolean;
   canChooseTeam: boolean;
   myTeamId: string | null;
+  defaultVisibility: Visibility;
 }) {
   const router = useRouter();
   const [q, setQ] = React.useState("");
@@ -133,7 +135,7 @@ export function ProjectsView({
         </div>
       )}
 
-      <ProjectFormDialog open={open} onOpenChange={setOpen} canChooseTeam={canChooseTeam} initial={{ teamId: myTeamId }} />
+      <ProjectFormDialog open={open} onOpenChange={setOpen} canChooseTeam={canChooseTeam} initial={{ teamId: myTeamId, visibility: defaultVisibility }} />
     </div>
   );
 }

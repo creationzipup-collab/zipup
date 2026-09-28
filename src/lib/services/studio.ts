@@ -1,9 +1,9 @@
 import "server-only";
 
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { assets, favorites, projectMembers, projects, user } from "@/lib/db/schema";
+import { assets, favorites, projectMembers, projects, promptPresets, user } from "@/lib/db/schema";
 import { MODELS } from "@/lib/models/registry";
 import { resolveProvider } from "@/lib/providers";
 import { atLeast, computeAccess, ensurePersonalProject, visibleProjectsWhere } from "@/lib/services/access";
@@ -13,7 +13,7 @@ import type { CurrentUser } from "@/lib/session";
 
 export type ModelStatusMap = Record<
   string,
-  { enabled: boolean; provider: "higgsfield" | "fal" | "mock" | null; priceOverrides: Record<string, number> }
+  { enabled: boolean; provider: "higgsfield" | "fal" | "mock" | null; priceOverrides: Record<string, number>; notes: string | null }
 >;
 
 export async function getModelStatus(): Promise<ModelStatusMap> {
@@ -21,7 +21,7 @@ export async function getModelStatus(): Promise<ModelStatusMap> {
   const out: ModelStatusMap = {};
   for (const m of MODELS) {
     const c = configs[m.id];
-    out[m.id] = { enabled: c?.enabled ?? true, provider: resolveProvider(m), priceOverrides: c?.priceOverrides ?? {} };
+    out[m.id] = { enabled: c?.enabled ?? true, provider: resolveProvider(m), priceOverrides: c?.priceOverrides ?? {}, notes: c?.notes ?? null };
   }
   return out;
 }
@@ -83,15 +83,52 @@ async function refItems(u: CurrentUser, ids: string[]): Promise<RefItem[]> {
     .map((i) => ({ id: i!.id, kind: i!.kind, filename: i!.filename, width: i!.width, height: i!.height, durationSec: i!.durationSec, urls: i!.urls }));
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const uuidOrUndefined = (v?: string) => (v && UUID.test(v) ? v : undefined);
+
 export async function studioPrefill(
   u: CurrentUser,
   kind: "image" | "video",
-  sp: { from?: string; ref?: string; start?: string; model?: string; prompt?: string; project?: string },
+  raw: { from?: string; ref?: string; start?: string; model?: string; prompt?: string; project?: string; preset?: string },
 ): Promise<StudioPrefill> {
+  // 잘못된 ID가 DB 오류로 이어지지 않도록 UUID만 통과
+  const sp = {
+    ...raw,
+    from: uuidOrUndefined(raw.from),
+    ref: uuidOrUndefined(raw.ref),
+    start: uuidOrUndefined(raw.start),
+    project: uuidOrUndefined(raw.project),
+    preset: uuidOrUndefined(raw.preset),
+  };
   const out: StudioPrefill = {};
   if (sp.model && MODELS.some((m) => m.id === sp.model && m.kind === kind)) out.modelId = sp.model;
   if (sp.prompt) out.prompt = sp.prompt.slice(0, 5000);
   if (sp.project) out.projectId = sp.project;
+
+  // 프롬프트 라이브러리에서 "스튜디오에서 사용"
+  if (sp.preset) {
+    const [p] = await db
+      .select()
+      .from(promptPresets)
+      .where(
+        and(
+          eq(promptPresets.id, sp.preset),
+          or(
+            eq(promptPresets.userId, u.id),
+            eq(promptPresets.visibility, "company"),
+            u.teamId ? and(eq(promptPresets.visibility, "team"), eq(promptPresets.teamId, u.teamId)) : sql`false`,
+          ),
+        ),
+      );
+    if (p) {
+      out.prompt = p.prompt;
+      if (p.modelId && MODELS.some((m) => m.id === p.modelId && m.kind === kind)) {
+        out.modelId = p.modelId;
+        if (p.params) out.params = p.params;
+      }
+      await db.update(promptPresets).set({ useCount: sql`${promptPresets.useCount} + 1` }).where(eq(promptPresets.id, p.id));
+    }
+  }
 
   if (sp.from) {
     const d = await assetDetail(u, sp.from);

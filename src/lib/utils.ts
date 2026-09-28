@@ -50,6 +50,13 @@ export function usd(micros: number | null | undefined, precise = false): string 
   return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/** 짧은 임의 ID (노드 ID 등, 보안 용도 아님) */
+export function randomId(len = 6): string {
+  return Math.random()
+    .toString(36)
+    .slice(2, 2 + len);
+}
+
 export function initials(name: string): string {
   const n = name.trim();
   if (!n) return "?";

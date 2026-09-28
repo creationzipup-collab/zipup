@@ -71,7 +71,9 @@ export function ReferenceSlots({
   const pendingSlot = React.useRef<SlotKey>("images");
   const [dragOver, setDragOver] = React.useState(false);
   const valueRef = React.useRef(value);
-  valueRef.current = value;
+  React.useLayoutEffect(() => {
+    valueRef.current = value;
+  }, [value]);
 
   const add = React.useCallback(
     (slot: SlotKey, items: RefAsset[]) => {

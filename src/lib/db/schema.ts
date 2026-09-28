@@ -11,6 +11,7 @@ import {
   smallint,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -155,7 +156,13 @@ export const projects = pgTable(
     lastActivityAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     ...timestamps,
   },
-  (t) => [index().on(t.ownerId), index().on(t.teamId), index().on(t.lastActivityAt)],
+  (t) => [
+    index().on(t.ownerId),
+    index().on(t.teamId),
+    index().on(t.lastActivityAt),
+    // 사용자당 개인 작업공간 1개 (동시 요청 경쟁 방지)
+    uniqueIndex("projects_one_personal_per_owner").on(t.ownerId).where(sql`${t.isPersonal} = true and ${t.archivedAt} is null`),
+  ],
 );
 
 export const projectMembers = pgTable(
