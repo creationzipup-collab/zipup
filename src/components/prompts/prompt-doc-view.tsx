@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Check, Clapperboard, Copy, EyeOff, Globe, ImagePlus, Link2, Lock, Pencil, Share2, Trash2, Users } from "lucide-react";
+import { ArrowLeft, Check, Clapperboard, Copy, Globe, ImagePlus, Link2, Lock, Pencil, Send, Trash2, Undo2, Users } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -9,7 +9,6 @@ import { toast } from "sonner";
 
 import { BilingualPanel } from "@/components/prompt-desk/bilingual-panel";
 import { DiffBadge, DiffView } from "@/components/prompt-desk/diff-view";
-import { copyShareLink } from "@/components/prompt-desk/versions";
 import { ShareDialog } from "@/components/prompts/share-dialog";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
@@ -114,27 +113,36 @@ export function PromptDocView({ doc, versions, modelId }: { doc: PromptDocDTO; v
               </Link>
             </Button>
           ))}
-          <Button variant="secondary" size="sm" onClick={() => copyShareLink(doc.id)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(`${window.location.origin}/prompts/${doc.id}`);
+                toast.success("링크를 복사했어요.", { description: "공개 범위 안의 동료나 받은 사람이 열 수 있어요." });
+              } catch {
+                toast.error("클립보드에 복사하지 못했어요.");
+              }
+            }}
+          >
             <Link2 /> 링크 복사
           </Button>
-          {doc.canManage &&
-            (doc.shared ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={async () => {
-                  await fetchJson(`/api/prompts/${doc.id}/share`, { method: "DELETE" }).catch((e) => toast.error((e as Error).message));
-                  toast.success("게시판에서 내렸어요.");
-                  router.refresh();
-                }}
-              >
-                <EyeOff /> 게시판에서 내리기
-              </Button>
-            ) : (
-              <Button variant="secondary" size="sm" onClick={() => setSharing(true)}>
-                <Share2 /> 게시판에 공유
-              </Button>
-            ))}
+          <Button variant="secondary" size="sm" onClick={() => setSharing(true)}>
+            <Send /> 보내기
+          </Button>
+          {doc.shared && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={async () => {
+                await fetchJson(`/api/prompts/${doc.id}/share`, { method: "DELETE" }).catch((e) => toast.error((e as Error).message));
+                toast.success("내가 보낸 공유를 거뒀어요.");
+                router.refresh();
+              }}
+            >
+              <Undo2 /> 보낸 공유 거두기
+            </Button>
+          )}
         </div>
         <ShareDialog
           open={sharing}

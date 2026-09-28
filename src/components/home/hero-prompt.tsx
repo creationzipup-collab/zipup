@@ -45,8 +45,8 @@ export function HeroPrompt({ recent }: { recent: { id: string; title: string; pr
 
   return (
     <div className="flex flex-col gap-3">
-      <div className={cn("prompt-card rounded-[22px] p-px transition", focused && "shadow-[0_30px_80px_-30px_color-mix(in_oklab,var(--accent)_40%,transparent)]")}>
-        <div className="relative rounded-[21px] bg-panel/90 backdrop-blur">
+      <div className={cn("prompt-card rounded-[22px] p-px transition", focused && "shadow-[0_30px_90px_-30px_var(--accent-glow)]")}>
+        <div className="relative rounded-[21px] bg-[rgb(8_11_15/0.72)] backdrop-blur-2xl">
           <div className="relative">
             <textarea
               ref={ref}
@@ -62,10 +62,10 @@ export function HeroPrompt({ recent }: { recent: { id: string; title: string; pr
               }}
               rows={2}
               aria-label="프롬프트"
-              className="relative z-10 block w-full resize-none bg-transparent px-5 pb-2 pt-4 text-[17px] leading-[1.7] outline-none"
+              className="relative z-10 block w-full resize-none bg-transparent px-5 pb-2 pt-4 text-[16.5px] leading-[1.7] text-white outline-none"
             />
             {!value && (
-              <div className="pointer-events-none absolute inset-x-5 top-4 text-[17px] leading-[1.7] text-fg-4">
+              <div className="pointer-events-none absolute inset-x-5 top-4 text-[16.5px] leading-[1.7] text-white/40">
                 <AnimatePresence mode="wait">
                   <motion.span
                     key={example}
@@ -82,19 +82,19 @@ export function HeroPrompt({ recent }: { recent: { id: string; title: string; pr
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2 px-3 pb-3">
-            <span className="hidden px-2 font-mono text-[10.5px] uppercase tracking-[0.16em] text-fg-4 sm:inline">KO · EN · ZH</span>
+            <span className="hidden px-2 font-mono text-[10.5px] uppercase tracking-[0.16em] text-white/45 sm:inline">KO · EN · ZH</span>
             <div className="ml-auto flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => go("video")}
-                className="flex h-10 items-center gap-2 rounded-xl border border-line-2 bg-panel-2 px-3.5 text-[13.5px] font-medium transition hover:border-line-3 hover:bg-panel-3"
+                className="flex h-10 items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-4 text-[13.5px] font-medium text-white transition hover:border-white/30 hover:bg-white/[0.1]"
               >
                 <Clapperboard className="size-4" /> 영상 만들기
               </button>
               <button
                 type="button"
                 onClick={() => go("image")}
-                className="group flex h-10 items-center gap-2 rounded-xl bg-inv px-4 text-[13.5px] font-semibold text-inv-fg shadow-[0_0_30px_-8px_var(--accent)] transition hover:opacity-90"
+                className="group flex h-10 items-center gap-2 rounded-full bg-white px-4.5 text-[13.5px] font-semibold text-[#05070a] shadow-[inset_0_1px_0_rgb(255_255_255/0.8),0_0_32px_-8px_var(--accent-glow)] transition hover:shadow-[inset_0_1px_0_rgb(255_255_255/0.8),0_0_40px_-6px_var(--accent-glow)]"
               >
                 <ImagePlus className="size-4" /> 이미지 만들기
                 <ArrowRight className="size-4 transition group-hover:translate-x-0.5" />
@@ -103,7 +103,7 @@ export function HeroPrompt({ recent }: { recent: { id: string; title: string; pr
           </div>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-1.5 px-1 text-[12px] text-fg-4">
+      <div className="flex flex-wrap items-center gap-1.5 px-1 text-[12px] text-white/50">
         <span className="flex items-center gap-1">
           <Kbd>⌘</Kbd>
           <Kbd>↵</Kbd> 이미지
@@ -113,18 +113,21 @@ export function HeroPrompt({ recent }: { recent: { id: string; title: string; pr
           <Kbd>⌘</Kbd>
           <Kbd>↵</Kbd> 영상
         </span>
-        {recent.length > 0 && <span className="text-fg-4">최근 저장한 프롬프트</span>}
-        {recent.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            onClick={() => go(p.kind === "video" ? "video" : "image", p.id)}
-            className="max-w-[220px] truncate rounded-full border border-line-2 bg-panel/60 px-2.5 py-1 text-[12px] text-fg-3 transition hover:border-line-3 hover:text-fg"
-            title={p.prompt}
-          >
-            {p.title}
-          </button>
-        ))}
+        {recent.length > 0 && <span className="text-white/45">최근 프롬프트</span>}
+        {recent
+          .filter((p, i, all) => all.findIndex((q) => q.title === p.title) === i)
+          .slice(0, 3)
+          .map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => go(p.kind === "video" ? "video" : "image", p.id)}
+              className="max-w-[220px] truncate rounded-full border border-white/15 bg-black/25 px-2.5 py-1 text-[12px] text-white/70 backdrop-blur-md transition hover:border-white/35 hover:text-white"
+              title={p.prompt}
+            >
+              {p.title}
+            </button>
+          ))}
       </div>
     </div>
   );

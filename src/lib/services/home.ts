@@ -57,7 +57,9 @@ export type HomeProject = {
 export type HomeLive = { userName: string; modelId: string; kind: "image" | "video"; projectName: string; cutCode: string | null; since: string };
 
 export type HomeBoard = {
-  stats: { activeCuts: number; todayTakes: number; monthOk: number; generating: number };
+  stats: { activeCuts: number; todayTakes: number; monthTakes: number; monthOk: number; monthNg: number; monthKeep: number; generating: number };
+  /** 최근 14일 하루 테이크 수 (한국 날짜) */
+  daily: { label: string; value: number }[];
   cuts: HomeCut[];
   live: HomeLive[];
   projects: HomeProject[];
@@ -78,6 +80,11 @@ function kstStarts() {
   return { day: new Date(Date.UTC(y, m, d) - KST), month: new Date(Date.UTC(y, m, 1) - KST), today: { y, m: m + 1, d, wd: k.getUTCDay() } };
 }
 
+/** 오늘까지 n일의 한국 날짜 키 (YYYY-MM-DD) */
+function lastDays(day: Date, n: number): string[] {
+  return Array.from({ length: n }, (_, i) => new Date(day.getTime() + KST - (n - 1 - i) * 86400_000).toISOString().slice(0, 10));
+}
+
 /** 홈: 지금 스튜디오에서 무슨 일이 일어나고 있는지 (진행 중인 컷, 생성 중인 사람, 프로젝트 진행, 최근 OK) */
 export async function homeBoard(u: CurrentUser): Promise<HomeBoard> {
   const { day, month, today } = kstStarts();
@@ -89,19 +96,39 @@ export async function homeBoard(u: CurrentUser): Promise<HomeBoard> {
     .limit(200);
   const ids = visible.map((p) => p.id);
   if (!ids.length) {
-    return { stats: { activeCuts: 0, todayTakes: 0, monthOk: 0, generating: 0 }, cuts: [], live: [], projects: [], ok: [], mine: [], backdrop: null, today };
+    return {
+      stats: { activeCuts: 0, todayTakes: 0, monthTakes: 0, monthOk: 0, monthNg: 0, monthKeep: 0, generating: 0 },
+      daily: lastDays(day, 14).map((d) => ({ label: `${d.slice(5, 7)}.${d.slice(8)}`, value: 0 })),
+      cuts: [],
+      live: [],
+      projects: [],
+      ok: [],
+      mine: [],
+      backdrop: null,
+      today,
+    };
   }
   const projName = new Map(visible.map((p) => [p.id, p]));
   const liveAssets = and(inArray(assets.projectId, ids), isNull(assets.deletedAt));
 
-  const [statRows, cutRows, liveRows, cutStatusRows, projTakeRows, okRows, mineRows] = await Promise.all([
+  const days = lastDays(day, 14);
+  const since = new Date(day.getTime() - 13 * 86400_000);
+  const [statRows, dailyRows, cutRows, liveRows, cutStatusRows, projTakeRows, okRows, mineRows] = await Promise.all([
     db
       .select({
         todayTakes: sql<number>`count(*) filter (where ${assets.createdAt} >= ${day.toISOString()}::timestamptz and ${assets.source} = 'generated')::int`,
-        monthOk: sql<number>`count(*) filter (where ${assets.flag} = 'pick' and ${assets.updatedAt} >= ${month.toISOString()}::timestamptz)::int`,
+        monthTakes: sql<number>`count(*) filter (where ${assets.source} = 'generated')::int`,
+        monthOk: sql<number>`count(*) filter (where ${assets.flag} = 'pick')::int`,
+        monthNg: sql<number>`count(*) filter (where ${assets.flag} = 'reject')::int`,
+        monthKeep: sql<number>`count(*) filter (where ${assets.flag} = 'keep')::int`,
       })
       .from(assets)
       .where(and(liveAssets, gte(assets.createdAt, month))),
+    db
+      .select({ d: sql<string>`to_char(${assets.createdAt} at time zone 'Asia/Seoul', 'YYYY-MM-DD')`, n: sql<number>`count(*)::int` })
+      .from(assets)
+      .where(and(liveAssets, eq(assets.source, "generated"), gte(assets.createdAt, since)))
+      .groupBy(sql`1`),
     db
       .select({ c: cuts, assignee: user.name })
       .from(cuts)
@@ -220,14 +247,19 @@ export async function homeBoard(u: CurrentUser): Promise<HomeBoard> {
   }
   const takesBy = new Map(projTakeRows.map((r) => [r.projectId, r]));
   const activeCuts = cutStatusRows.filter((r) => r.status === "wip" || r.status === "review").reduce((s, r) => s + r.n, 0);
+  const perDay = new Map(dailyRows.map((r) => [r.d, r.n]));
 
   return {
     stats: {
       activeCuts,
       todayTakes: statRows[0]?.todayTakes ?? 0,
+      monthTakes: statRows[0]?.monthTakes ?? 0,
       monthOk: statRows[0]?.monthOk ?? 0,
+      monthNg: statRows[0]?.monthNg ?? 0,
+      monthKeep: statRows[0]?.monthKeep ?? 0,
       generating: liveRows.length,
     },
+    daily: days.map((d) => ({ label: `${d.slice(5, 7)}.${d.slice(8)}`, value: perDay.get(d) ?? 0 })),
     cuts: cutsOut,
     live: liveRows.slice(0, 8).map((l) => ({
       userName: l.userName,

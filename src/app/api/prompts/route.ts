@@ -1,41 +1,17 @@
-import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { handle, readJson } from "@/lib/api";
-import { db } from "@/lib/db";
-import { promptPresets, user } from "@/lib/db/schema";
-import { createPresetWithVersion, sharedBoard } from "@/lib/services/prompt-docs";
+import { createPresetWithVersion, libraryList, type LibraryTab } from "@/lib/services/prompt-docs";
 import { apiUser } from "@/lib/session";
 
+const TABS: LibraryTab[] = ["saved", "inbox", "team", "sent"];
+
+/** 프롬프트 라이브러리: ?tab=saved(저장) | inbox(받은) | team(팀·전사) | sent(보낸) */
 export const GET = handle(async (req: Request) => {
   const u = await apiUser();
   const p = new URL(req.url).searchParams;
-  // 게시판: 직접 공유한 것만
-  if (p.get("board") === "1") return { items: await sharedBoard(u, { scope: p.get("scope") ?? "all", q: p.get("q") ?? "", kind: p.get("kind") ?? undefined }) };
-  const scope = p.get("scope") ?? "all";
-  const q = (p.get("q") ?? "").trim();
-  const kind = p.get("kind");
-  const visible = or(
-    eq(promptPresets.userId, u.id),
-    eq(promptPresets.visibility, "company"),
-    u.teamId ? and(eq(promptPresets.visibility, "team"), eq(promptPresets.teamId, u.teamId)) : sql`false`,
-  );
-  const conds = [visible];
-  if (scope === "mine") conds.push(eq(promptPresets.userId, u.id));
-  if (scope === "team" && u.teamId) conds.push(eq(promptPresets.teamId, u.teamId));
-  if (kind === "image" || kind === "video") conds.push(or(eq(promptPresets.kind, kind), eq(promptPresets.kind, "any")));
-  if (q) {
-    const pat = `%${q.replace(/[\\%_]/g, (m) => "\\" + m)}%`;
-    conds.push(or(ilike(promptPresets.title, pat), ilike(promptPresets.prompt, pat), sql`array_to_string(${promptPresets.tags}, ' ') ilike ${pat}`));
-  }
-  const rows = await db
-    .select({ p: promptPresets, author: user.name })
-    .from(promptPresets)
-    .innerJoin(user, eq(user.id, promptPresets.userId))
-    .where(and(...conds))
-    .orderBy(desc(promptPresets.useCount), desc(promptPresets.updatedAt))
-    .limit(100);
-  return { items: rows.map((r) => ({ ...r.p, author: r.author, mine: r.p.userId === u.id })) };
+  const tab = TABS.includes(p.get("tab") as LibraryTab) ? (p.get("tab") as LibraryTab) : "saved";
+  return libraryList(u, { tab, q: p.get("q") ?? "", kind: p.get("kind") ?? undefined });
 });
 
 const Body = z.object({
@@ -47,19 +23,12 @@ const Body = z.object({
   tags: z.array(z.string().trim().min(1).max(30)).max(10).default([]),
   visibility: z.enum(["private", "team", "company"]).default("private"),
   note: z.string().trim().max(200).nullish(),
-  /** 게시판에 바로 올리기 */
-  shared: z.boolean().optional(),
 });
 
-/** 새 프롬프트 (v1 버전과 함께 저장) */
+/** 라이브러리에 저장 (v1 버전과 함께). 다른 사람에게 보내려면 /api/prompts/share */
 export const POST = handle(async (req: Request) => {
   const u = await apiUser();
   const b = Body.parse(await readJson(req));
   const { preset, version } = await createPresetWithVersion(u, b);
-  if (b.shared && b.visibility !== "private") {
-    const { sharePrompt } = await import("@/lib/services/prompt-docs");
-    const shared = await sharePrompt(u, { presetId: preset.id, visibility: b.visibility });
-    return { item: shared, version: version.version };
-  }
   return { item: preset, version: version.version };
 });

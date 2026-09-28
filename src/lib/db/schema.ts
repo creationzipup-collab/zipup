@@ -231,6 +231,8 @@ export const generations = pgTable(
     parentGenerationId: uuid(),
     /** 결과물을 넣을 컷 (없으면 프로젝트에 바로) */
     cutId: uuid(),
+    /** 이 생성에 쓴 컷 프롬프트 버전 (버전별 테이크 보기) */
+    promptVersionId: uuid(),
     canvasId: uuid(),
     canvasNodeId: text(),
     submitAttempts: integer().notNull().default(0),
@@ -251,6 +253,7 @@ export const generations = pgTable(
     index().on(t.providerRequestId),
     index().on(t.canvasId),
     index().on(t.cutId, t.status),
+    index().on(t.promptVersionId),
   ],
 );
 
@@ -480,9 +483,65 @@ export const promptPresets = pgTable(
     sharedBy: text().references(() => user.id, { onDelete: "set null" }),
     /** 이 프롬프트로 나온 클립 (게시판 썸네일) */
     sourceAssetId: uuid().references(() => assets.id, { onDelete: "set null" }),
+    /**
+     * 컷 작업 기록: 값이 있으면 라이브러리에는 안 보이고 그 컷(컷 없는 프로젝트는 프로젝트) 안에서만 버전이 올라가요.
+     * 프로젝트 멤버가 함께 봐요.
+     */
+    projectId: uuid().references(() => projects.id, { onDelete: "cascade" }),
+    cutId: uuid().references(() => cuts.id, { onDelete: "cascade" }),
     ...timestamps,
   },
-  (t) => [index().on(t.userId), index().on(t.teamId), index().on(t.sharedAt)],
+  (t) => [index().on(t.userId), index().on(t.teamId), index().on(t.sharedAt), index().on(t.projectId, t.cutId, t.kind)],
+);
+
+/**
+ * 프롬프트 공유 — 한 번 보낼 때마다 한 줄. 사람·팀·전사 중 하나로 보내고, 메시지와 클립을 함께 붙여요.
+ * 받은 사람에게는 알림이 가고, 그 프롬프트의 대화방에서 이야기해요.
+ */
+export const promptShares = pgTable(
+  "prompt_shares",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    presetId: uuid()
+      .notNull()
+      .references(() => promptPresets.id, { onDelete: "cascade" }),
+    fromUserId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    target: text().$type<"user" | "team" | "company">().notNull(),
+    toUserId: text().references(() => user.id, { onDelete: "cascade" }),
+    toTeamId: uuid().references(() => teams.id, { onDelete: "cascade" }),
+    message: text(),
+    /** 함께 보낸 클립 */
+    assetId: uuid().references(() => assets.id, { onDelete: "set null" }),
+    /** 사람에게 보낸 공유: 받은 사람이 열어 본 때 */
+    seenAt: timestamp({ withTimezone: true }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index().on(t.presetId),
+    index().on(t.toUserId, t.createdAt),
+    index().on(t.toTeamId, t.createdAt),
+    index().on(t.fromUserId, t.createdAt),
+    index().on(t.target, t.createdAt),
+  ],
+);
+
+/** 공유한 프롬프트의 대화 */
+export const promptMessages = pgTable(
+  "prompt_messages",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    presetId: uuid()
+      .notNull()
+      .references(() => promptPresets.id, { onDelete: "cascade" }),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    body: text().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index().on(t.presetId, t.createdAt)],
 );
 
 /** 프롬프트 버전 기록 (저장할 때마다 v1, v2 …) */

@@ -5,7 +5,7 @@ import { DotLogo } from "@/components/brand/dot-logo";
 /** 없는 주소 */
 export default function NotFound() {
   return (
-    <main data-theme="dark" className="relative grid min-h-dvh place-items-center overflow-hidden bg-[#060607] px-6 text-fg">
+    <main className="relative grid min-h-dvh place-items-center overflow-hidden bg-bg px-6 text-fg">
       <div className="flex w-full max-w-[560px] flex-col items-center text-center">
         <DotLogo lines="zipup" gap={6} radius={1.35} className="max-w-[420px] opacity-90" />
         <p className="mt-12 font-mono text-[11px] uppercase tracking-[0.24em] text-fg-4">404</p>

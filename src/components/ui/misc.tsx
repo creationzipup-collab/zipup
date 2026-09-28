@@ -13,7 +13,7 @@ export function Badge({
   tone?: "neutral" | "accent" | "success" | "warning" | "danger" | "info" | "outline";
 }) {
   const tones = {
-    neutral: "bg-panel-3 text-fg-2",
+    neutral: "bg-white/[0.06] text-fg-2",
     accent: "bg-accent-soft text-accent",
     success: "bg-success/12 text-success",
     warning: "bg-warning/12 text-warning",
@@ -37,7 +37,7 @@ export function Kbd({ className, ...props }: React.HTMLAttributes<HTMLElement>) 
   return (
     <kbd
       className={cn(
-        "inline-flex h-5 min-w-5 items-center justify-center rounded-md border border-line-2 bg-panel-2 px-1 font-mono text-[10.5px] text-fg-3",
+        "inline-flex h-5 min-w-5 items-center justify-center rounded-md border border-line-2 bg-white/[0.04] px-1 font-mono text-[10.5px] text-fg-3",
         className,
       )}
       {...props}
@@ -59,7 +59,7 @@ export function Avatar({
   return (
     <span
       className={cn(
-        "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full text-white ring-1 ring-black/10",
+        "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full text-white ring-1 ring-white/10",
         className,
       )}
       style={{ width: size, height: size, background: avatarColor(name), fontSize: Math.max(9, size * 0.36) }}
@@ -91,7 +91,7 @@ export function EmptyState({
   return (
     <div className={cn("flex flex-col items-center justify-center gap-3 px-6 py-16 text-center", className)}>
       {icon && (
-        <div className="flex size-12 items-center justify-center rounded-2xl border border-line-2 bg-panel-2 text-fg-2 [&_svg]:size-5">
+        <div className="flex size-12 items-center justify-center rounded-full border border-dashed border-line-3 text-fg-3 [&_svg]:size-5">
           {icon}
         </div>
       )}
@@ -119,9 +119,9 @@ export function Separator({ className, vertical }: { className?: string; vertica
 }
 
 export function Progress({ value, className, tone = "fg" }: { value: number; className?: string; tone?: "fg" | "accent" | "danger" | "warning" }) {
-  const color = { fg: "bg-fg", accent: "bg-accent", danger: "bg-danger", warning: "bg-warning" }[tone];
+  const color = { fg: "bg-fg", accent: "bg-accent shadow-[0_0_10px_var(--accent-glow)]", danger: "bg-danger", warning: "bg-warning" }[tone];
   return (
-    <div className={cn("h-1.5 w-full overflow-hidden rounded-full bg-panel-3", className)}>
+    <div className={cn("h-1.5 w-full overflow-hidden rounded-full bg-white/[0.07]", className)}>
       <div className={cn("h-full rounded-full transition-[width] duration-500", color)} style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
     </div>
   );

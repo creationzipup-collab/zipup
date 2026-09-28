@@ -50,6 +50,8 @@ export async function createGenerationRequest(body: {
   count?: number;
   projectId?: string | null;
   cutId?: string | null;
+  /** 스튜디오: 컷 버전 기록에 남기기 */
+  recordVersion?: boolean;
   canvasId?: string | null;
   canvasNodeId?: string | null;
 }) {

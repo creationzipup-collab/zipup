@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AtSign, Bell, CircleCheck, CircleX, MessageSquare, UserPlus, Wallet } from "lucide-react";
+import { AtSign, Bell, CircleCheck, CircleX, MessageSquare, MessagesSquare, Send, UserPlus, Wallet } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,8 @@ const ICONS: Record<string, React.ElementType> = {
   project_invite: UserPlus,
   budget_warning: Wallet,
   budget_exceeded: Wallet,
+  prompt_shared: Send,
+  prompt_message: MessagesSquare,
 };
 
 export function NotificationsButton() {
@@ -53,7 +55,7 @@ export function NotificationsButton() {
           <Button variant="ghost" size="icon-sm" className="relative" aria-label="알림">
             <Bell />
             {unread > 0 && (
-              <span className="absolute right-1 top-1 flex min-w-3.5 items-center justify-center rounded-full bg-accent px-1 font-mono text-[9px] font-bold leading-[14px] text-[#0a0a0a]">
+              <span className="absolute right-1 top-1 flex min-w-3.5 items-center justify-center rounded-full bg-accent px-1 font-mono text-[9px] font-bold leading-[14px] text-on-accent shadow-[0_0_10px_var(--accent-glow)]">
                 {unread > 9 ? "9+" : unread}
               </span>
             )}
@@ -85,12 +87,18 @@ export function NotificationsButton() {
                     }
                     if (n.href) router.push(n.href);
                   }}
-                  className="flex w-full items-start gap-3 rounded-xl px-2.5 py-2.5 text-left transition hover:bg-panel-2"
+                  className="flex w-full items-start gap-3 rounded-xl px-2.5 py-2.5 text-left transition hover:bg-white/[0.05]"
                 >
                   <span
                     className={cn(
-                      "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg border border-line-2 bg-panel-2",
-                      n.type.includes("failed") || n.type.includes("exceeded") ? "text-danger" : n.type.includes("budget") ? "text-warning" : "text-fg-2",
+                      "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border border-line-2 bg-white/[0.04]",
+                      n.type.includes("failed") || n.type.includes("exceeded")
+                        ? "text-danger"
+                        : n.type.includes("budget")
+                          ? "text-warning"
+                          : n.type.startsWith("prompt_")
+                            ? "border-accent/40 text-accent"
+                            : "text-fg-2",
                     )}
                   >
                     <Icon className="size-3.5" />
@@ -100,7 +108,7 @@ export function NotificationsButton() {
                     {n.body && <span className="mt-0.5 block truncate text-xs text-fg-3">{n.body}</span>}
                     <TimeAgo date={n.createdAt} className="mt-1 block text-[11px] text-fg-4" />
                   </span>
-                  {!n.readAt && <span className="mt-2 size-1.5 shrink-0 rounded-full bg-accent" />}
+                  {!n.readAt && <span className="mt-2 size-1.5 shrink-0 rounded-full bg-accent shadow-[0_0_6px_var(--accent-glow)]" />}
                 </button>
               );
             })

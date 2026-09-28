@@ -15,7 +15,9 @@ export type NotifyInput = {
     | "comment"
     | "project_invite"
     | "budget_warning"
-    | "budget_exceeded";
+    | "budget_exceeded"
+    | "prompt_shared"
+    | "prompt_message";
   title: string;
   body?: string;
   href?: string;

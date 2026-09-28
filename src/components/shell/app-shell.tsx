@@ -2,7 +2,6 @@
 
 import {
   BookText,
-  Check,
   Clapperboard,
   FolderKanban,
   Home,
@@ -10,12 +9,10 @@ import {
   LayoutGrid,
   LogOut,
   Menu as MenuIcon,
-  Moon,
   Plus,
   Search,
   Settings,
   ShieldCheck,
-  Sun,
   Workflow,
 } from "lucide-react";
 import Link from "next/link";
@@ -24,9 +21,8 @@ import { LayoutGroup } from "motion/react";
 import * as React from "react";
 
 import { BrandLockup } from "@/components/brand/logo";
-import { RollingNumber } from "@/components/brand/motion";
+import { Ticker } from "@/components/brand/hud";
 import { LiquidRail } from "@/components/shell/liquid-rail";
-import { useTheme } from "@/components/providers";
 import { CommandPalette } from "@/components/shell/command-palette";
 import { NotificationsButton } from "@/components/shell/notifications";
 import { QueueIndicator } from "@/components/shell/queue-indicator";
@@ -66,6 +62,11 @@ export function useShell(): ShellCtx {
   const ctx = React.useContext(ShellContext);
   if (!ctx) throw new Error("useShell outside AppShell");
   return ctx;
+}
+
+/** 셸 밖(팝아웃 창 등)에서도 쓸 수 있는 버전 */
+export function useShellMaybe(): ShellCtx | null {
+  return React.useContext(ShellContext);
 }
 
 const NAV = [
@@ -132,7 +133,7 @@ export function AppShell({
   return (
     <ShellContext.Provider value={ctx}>
       <div className="flex min-h-dvh">
-        <aside className="sticky top-0 hidden h-dvh w-[248px] shrink-0 flex-col border-r border-line bg-bg-2 lg:flex">
+        <aside className="sticky top-0 hidden h-dvh w-[240px] shrink-0 flex-col border-r border-line bg-[rgb(6_8_11/0.92)] lg:flex">
           <LayoutGroup id="nav-desktop">{sidebar}</LayoutGroup>
         </aside>
 
@@ -145,13 +146,13 @@ export function AppShell({
         </Dialog>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-40 flex h-14 items-center gap-2 border-b border-line bg-bg/75 px-3 backdrop-blur-xl sm:px-5">
+          <header className="sticky top-0 z-40 flex h-14 items-center gap-2 border-b border-white/[0.07] bg-[rgb(5_7_10/0.5)] px-3 backdrop-blur-xl backdrop-saturate-150 sm:px-5">
             <Button variant="ghost" size="icon-sm" className="lg:hidden" onClick={() => setNavOpen(true)} aria-label="메뉴">
               <MenuIcon />
             </Button>
             <button
               onClick={() => setPaletteOpen(true)}
-              className="group flex h-9 w-full max-w-[420px] items-center gap-2.5 rounded-[10px] border border-line bg-panel/60 px-3 text-left text-[13px] text-fg-4 transition hover:border-line-2 hover:text-fg-3"
+              className="group flex h-9 w-full max-w-[420px] items-center gap-2.5 rounded-full border border-white/10 bg-white/[0.035] px-3.5 text-left text-[13px] text-fg-3 transition hover:border-white/20 hover:text-fg-2"
             >
               <Search className="size-4" />
               <span className="flex-1 truncate">프로젝트·에셋 검색, 페이지 이동…</span>
@@ -167,7 +168,6 @@ export function AppShell({
               )}
               <QueueIndicator />
               <NotificationsButton />
-              <ThemeButton />
             </div>
           </header>
           <main className="min-w-0 flex-1">{children}</main>
@@ -175,17 +175,6 @@ export function AppShell({
       </div>
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} isAdmin={user.role === "admin"} />
     </ShellContext.Provider>
-  );
-}
-
-function ThemeButton() {
-  const { theme, toggle } = useTheme();
-  return (
-    <Tip content={theme === "dark" ? "라이트 모드" : "다크 모드"}>
-      <Button variant="ghost" size="icon-sm" onClick={toggle} aria-label="테마 전환">
-        {theme === "dark" ? <Sun /> : <Moon />}
-      </Button>
-    </Tip>
   );
 }
 
@@ -296,11 +285,11 @@ function SidebarInner({
                 href={`/projects/${p.id}`}
                 className={cn(
                   "flex h-8 items-center gap-2.5 rounded-lg px-3 text-[13px] transition",
-                  active ? "bg-panel-2 text-fg" : "text-fg-3 hover:bg-panel/80 hover:text-fg",
+                  active ? "bg-white/[0.05] text-fg" : "text-fg-3 hover:bg-white/[0.03] hover:text-fg",
                 )}
               >
                 <span
-                  className="size-2 shrink-0 rounded-[3px]"
+                  className="size-1.5 shrink-0 rounded-full"
                   style={{ background: p.isPersonal ? "var(--fg-3)" : p.color ?? "var(--accent)" }}
                 />
                 <span className="truncate">{p.name}</span>
@@ -324,18 +313,18 @@ function BudgetCard({ budget }: { budget: BudgetStatus }) {
   const main = team?.cap ? { label: `${team.name} 예산`, spent: team.spent, cap: team.cap } : budget.user.cap ? { label: "개인 예산", spent: budget.user.spent, cap: budget.user.cap } : null;
   const pct = main ? (main.spent / main.cap) * 100 : 0;
   return (
-    <Link href="/settings" className="block rounded-xl border border-line bg-panel/70 p-3 transition hover:border-line-2">
+    <Link href="/settings" className="corners block rounded-xl border border-dashed border-line-2 p-3 transition hover:border-line-3">
       <div className="flex items-center justify-between">
         <span className="eyebrow">This month</span>
         <span className="font-mono text-[11px] text-fg-3">{main ? `${Math.round(pct)}%` : "무제한"}</span>
       </div>
-      <div className="mt-1.5 flex items-baseline gap-1.5">
-        <RollingNumber value={budget.user.spent} format={usd} className="font-mono text-[17px] font-semibold tracking-tight" />
-        <span className="text-[11px] text-fg-4">내 사용</span>
+      <div className="mt-2 flex items-end gap-1.5">
+        <Ticker value={budget.user.spent} format="usd" className="num text-[26px] text-fg" />
+        <span className="mb-0.5 text-[11px] text-fg-4">내 사용</span>
       </div>
       {main && (
         <>
-          <Progress value={pct} tone={pct >= 100 ? "danger" : pct >= 80 ? "warning" : "fg"} className="mt-2 h-1" />
+          <Progress value={pct} tone={pct >= 100 ? "danger" : pct >= 80 ? "warning" : "accent"} className="mt-2.5 h-[3px]" />
           <p className="mt-1.5 text-[11px] text-fg-4">
             {main.label} {usd(main.spent)} / {usd(main.cap)}
           </p>
@@ -347,7 +336,6 @@ function BudgetCard({ budget }: { budget: BudgetStatus }) {
 
 function UserMenu({ user }: { user: ShellUser }) {
   const router = useRouter();
-  const { theme, setTheme } = useTheme();
   return (
     <Menu>
       <MenuTrigger asChild>
@@ -366,12 +354,6 @@ function UserMenu({ user }: { user: ShellUser }) {
         <MenuLabel>{user.email}</MenuLabel>
         <MenuItem onSelect={() => router.push("/settings")}>
           <Settings /> 내 설정
-        </MenuItem>
-        <MenuItem onSelect={() => setTheme("dark")}>
-          <Moon /> 다크 모드 {theme === "dark" && <Check className="ml-auto" />}
-        </MenuItem>
-        <MenuItem onSelect={() => setTheme("light")}>
-          <Sun /> 라이트 모드 {theme === "light" && <Check className="ml-auto" />}
         </MenuItem>
         <MenuSeparator />
         <MenuItem

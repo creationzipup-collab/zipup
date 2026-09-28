@@ -1,13 +1,12 @@
 "use client";
 
-import { Check, KeyRound, LogOut, Moon, Sun } from "lucide-react";
+import { KeyRound, LogOut } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { PageTitle } from "@/components/brand/page-title";
-import { useTheme } from "@/components/providers";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/controls";
 import { Field, Input } from "@/components/ui/input";
@@ -15,7 +14,7 @@ import { Avatar, Badge, Progress } from "@/components/ui/misc";
 import { authClient } from "@/lib/auth-client";
 import type { BudgetStatus } from "@/lib/services/budget";
 import { ROLE_LABEL, type UserRole } from "@/lib/types";
-import { cn, fetchJson, usd } from "@/lib/utils";
+import { fetchJson, usd } from "@/lib/utils";
 
 type Me = { name: string; email: string; image: string | null; jobTitle: string | null; role: UserRole; teamName: string | null; teamColor: string | null };
 type Stats = { images: number; videos: number; uploads: number; favorites: number };
@@ -27,7 +26,6 @@ export function AccountSettings({ me, budget, stats, warnPercent }: { me: Me; bu
       <UsageCard budget={budget} stats={stats} warnPercent={warnPercent} />
       <ProfileSection me={me} />
       <PasswordSection />
-      <AppearanceSection />
       <SessionSection />
     </div>
   );
@@ -209,41 +207,6 @@ function PasswordSection() {
           </Button>
         </div>
       </form>
-    </Section>
-  );
-}
-
-function AppearanceSection() {
-  const { theme, setTheme } = useTheme();
-  return (
-    <Section title="화면" description="이 브라우저에만 적용돼요.">
-      <div className="grid gap-3 sm:grid-cols-2">
-        {(
-          [
-            ["dark", "다크", Moon, "어두운 화면에서 결과물 색이 더 정확하게 보여요"],
-            ["light", "라이트", Sun, "밝은 사무실·인쇄물 검토용"],
-          ] as const
-        ).map(([value, label, Icon, hint]) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => setTheme(value)}
-            className={cn(
-              "relative flex items-start gap-3 rounded-xl border p-4 text-left transition",
-              theme === value ? "border-fg bg-panel-2" : "border-line-2 hover:border-line-3",
-            )}
-          >
-            <span className={cn("flex size-9 items-center justify-center rounded-lg", value === "dark" ? "bg-[#0a0a0a] text-white ring-1 ring-white/10" : "bg-white text-[#0a0a0a] ring-1 ring-black/10")}>
-              <Icon className="size-4" />
-            </span>
-            <span className="flex flex-col">
-              <span className="text-[13.5px] font-medium">{label}</span>
-              <span className="text-[12px] text-fg-4">{hint}</span>
-            </span>
-            {theme === value && <Check className="absolute right-3 top-3 size-4" />}
-          </button>
-        ))}
-      </div>
     </Section>
   );
 }

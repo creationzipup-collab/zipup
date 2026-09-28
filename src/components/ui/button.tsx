@@ -5,26 +5,27 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "relative inline-flex shrink-0 select-none items-center justify-center gap-2 whitespace-nowrap font-medium transition-[background,color,border,box-shadow,transform,opacity] duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "relative inline-flex shrink-0 select-none items-center justify-center gap-2 whitespace-nowrap font-medium transition-[background,color,border,box-shadow,transform,opacity] duration-200 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        primary: "bg-inv text-inv-fg shadow-[0_1px_0_rgb(255_255_255/0.25)_inset] hover:opacity-90",
-        secondary: "border border-line-2 bg-panel-2 text-fg hover:bg-panel-3 hover:border-line-3",
-        ghost: "text-fg-2 hover:bg-panel-2 hover:text-fg",
-        outline: "border border-line-2 bg-transparent text-fg hover:bg-panel-2",
-        accent: "bg-accent text-[#0a0a0a] hover:bg-accent-2",
+        primary:
+          "bg-inv text-inv-fg shadow-[inset_0_1px_0_rgb(255_255_255/0.7)] hover:bg-white hover:shadow-[inset_0_1px_0_rgb(255_255_255/0.7),0_0_26px_-8px_rgb(255_255_255/0.45)]",
+        secondary: "border border-line-2 bg-white/[0.035] text-fg hover:border-line-3 hover:bg-white/[0.07]",
+        ghost: "text-fg-2 hover:bg-white/[0.06] hover:text-fg",
+        outline: "border border-line-2 bg-transparent text-fg hover:border-line-3 hover:bg-white/[0.04]",
+        accent: "bg-accent text-on-accent shadow-[0_0_28px_-8px_var(--accent-glow)] hover:bg-accent-2",
         danger: "border border-danger/30 bg-danger/10 text-danger hover:bg-danger/20",
         link: "h-auto px-0 text-fg-2 underline-offset-4 hover:text-fg hover:underline",
       },
       size: {
-        xs: "h-7 rounded-md px-2 text-xs [&_svg]:size-3.5",
-        sm: "h-8 rounded-lg px-3 text-[13px] [&_svg]:size-4",
-        md: "h-9 rounded-[10px] px-3.5 text-sm [&_svg]:size-4",
-        lg: "h-11 rounded-xl px-5 text-[15px] [&_svg]:size-[18px]",
-        icon: "size-9 rounded-[10px] [&_svg]:size-[18px]",
-        "icon-sm": "size-8 rounded-lg [&_svg]:size-4",
-        "icon-xs": "size-7 rounded-md [&_svg]:size-3.5",
+        xs: "h-7 rounded-full px-2.5 text-xs [&_svg]:size-3.5",
+        sm: "h-8 rounded-full px-3.5 text-[13px] [&_svg]:size-4",
+        md: "h-9 rounded-full px-4 text-sm [&_svg]:size-4",
+        lg: "h-11 rounded-full px-6 text-[15px] [&_svg]:size-[18px]",
+        icon: "size-9 rounded-full [&_svg]:size-[18px]",
+        "icon-sm": "size-8 rounded-full [&_svg]:size-4",
+        "icon-xs": "size-7 rounded-full [&_svg]:size-3.5",
       },
     },
     defaultVariants: { variant: "secondary", size: "md" },

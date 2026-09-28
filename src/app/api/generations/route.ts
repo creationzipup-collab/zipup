@@ -24,6 +24,7 @@ const CreateSchema = z.object({
   count: z.number().int().min(1).max(8).default(1),
   projectId: uuid.nullish(),
   cutId: uuid.nullish(),
+  recordVersion: z.boolean().optional(),
   canvasId: uuid.nullish(),
   canvasNodeId: z.string().max(100).nullish(),
   parentGenerationId: uuid.nullish(),

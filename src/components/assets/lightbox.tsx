@@ -261,7 +261,7 @@ export function Lightbox({
 
       {/* 정보 패널 */}
       {panel && (
-        <aside className="hidden w-[360px] shrink-0 flex-col border-l border-white/10 bg-[#0b0b0d] text-fg md:flex" data-theme="dark">
+        <aside className="hidden w-[360px] shrink-0 flex-col border-l border-white/10 bg-bg-2 text-fg md:flex">
           <div className="min-h-0 flex-1 overflow-y-auto p-5 scrollbar-thin">
             {!detail ? (
               <div className="flex flex-col gap-3">

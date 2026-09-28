@@ -17,6 +17,7 @@ import { canGenerate, type CurrentUser } from "@/lib/session";
 import { atLeast, computeAccess, ensurePersonalProject, requireProject } from "@/lib/services/access";
 import { assetUrls, loadAssetsByIds, providerInputUrl, storeAsset, type AssetRow } from "@/lib/services/assets";
 import { assertBudget, getBudgetStatus } from "@/lib/services/budget";
+import { recordCutVersion } from "@/lib/services/cut-docs";
 import { assertCutInProject } from "@/lib/services/cuts";
 import { adminIds, notify } from "@/lib/services/notifications";
 import { getModelConfigs, getSettings } from "@/lib/services/settings";
@@ -33,6 +34,8 @@ export type CreateGenerationInput = {
   projectId?: string | null;
   /** 결과물을 넣을 컷 (프로젝트의 컷) */
   cutId?: string | null;
+  /** 스튜디오: 이 컷(또는 프로젝트)의 버전 기록에 남기기 */
+  recordVersion?: boolean;
   canvasId?: string | null;
   canvasNodeId?: string | null;
   parentGenerationId?: string | null;
@@ -198,6 +201,17 @@ export async function createGeneration(u: CurrentUser, input: CreateGenerationIn
   });
 
   await db.update(projects).set({ lastActivityAt: new Date() }).where(eq(projects.id, project.id));
+
+  // 컷 버전 기록: 프롬프트가 바뀌었으면 새 버전, 같으면 마지막 버전에 테이크를 붙여요 (실패해도 생성은 계속)
+  if (input.recordVersion && prompt) {
+    try {
+      const { version } = await recordCutVersion(u, { projectId: project.id, cutId: input.cutId ?? null, kind: model.kind, prompt, modelId: model.id, params }, { checked: true });
+      await db.update(generations).set({ promptVersionId: version.id }).where(inArray(generations.id, rows.map((r) => r.id)));
+      for (const r of rows) r.promptVersionId = version.id;
+    } catch (err) {
+      console.error("[generation] cut version record failed", err);
+    }
+  }
   void checkBudgetWarning(u, totalMicros).catch(() => {});
   return { batchId, projectId: project.id, generations: rows };
 }

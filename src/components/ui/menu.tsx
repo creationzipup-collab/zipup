@@ -14,7 +14,7 @@ export const MenuGroup = M.Group;
 export const MenuSub = M.Sub;
 
 const menuPanel =
-  "z-50 min-w-[190px] overflow-hidden rounded-xl border border-line-2 bg-elevated/95 p-1 text-sm shadow-[var(--shadow-pop)] backdrop-blur-xl";
+  "glass-strong z-50 min-w-[190px] overflow-hidden rounded-xl p-1 text-sm shadow-[var(--shadow-pop)]";
 
 export function MenuContent({ className, sideOffset = 6, ...props }: React.ComponentProps<typeof M.Content>) {
   return (
@@ -25,7 +25,7 @@ export function MenuContent({ className, sideOffset = 6, ...props }: React.Compo
 }
 
 const itemClass =
-  "relative flex h-8 cursor-default select-none items-center gap-2 rounded-lg px-2 text-[13px] text-fg-2 outline-none transition-colors data-[disabled]:pointer-events-none data-[highlighted]:bg-panel-3 data-[highlighted]:text-fg data-[disabled]:opacity-40 [&_svg]:size-4 [&_svg]:shrink-0";
+  "relative flex h-8 cursor-default select-none items-center gap-2 rounded-lg px-2 text-[13px] text-fg-2 outline-none transition-colors data-[disabled]:pointer-events-none data-[highlighted]:bg-white/[0.07] data-[highlighted]:text-fg data-[disabled]:opacity-40 [&_svg]:size-4 [&_svg]:shrink-0";
 
 export function MenuItem({
   className,
@@ -65,7 +65,7 @@ export function MenuSeparator({ className, ...props }: React.ComponentProps<type
 
 export function MenuSubTrigger({ className, children, ...props }: React.ComponentProps<typeof M.SubTrigger>) {
   return (
-    <M.SubTrigger className={cn(itemClass, "data-[state=open]:bg-panel-3", className)} {...props}>
+    <M.SubTrigger className={cn(itemClass, "data-[state=open]:bg-white/[0.07]", className)} {...props}>
       {children}
       <ChevronRight className="ml-auto size-3.5" />
     </M.SubTrigger>
@@ -93,7 +93,7 @@ export function PopoverContent({ className, sideOffset = 8, ...props }: React.Co
       <P.Content
         sideOffset={sideOffset}
         className={cn(
-          "z-50 rounded-2xl border border-line-2 bg-elevated/95 p-3 text-sm shadow-[var(--shadow-pop)] outline-none backdrop-blur-xl",
+          "glass-strong z-50 rounded-2xl p-3 text-sm shadow-[var(--shadow-pop)] outline-none",
           className,
         )}
         {...props}
@@ -127,7 +127,7 @@ export function Tip({
         <T.Content
           side={side}
           sideOffset={6}
-          className="z-[60] flex items-center gap-2 rounded-lg border border-line-2 bg-elevated px-2 py-1 text-xs text-fg shadow-[var(--shadow-soft)]"
+          className="glass-strong z-[60] flex items-center gap-2 rounded-lg px-2 py-1 text-xs text-fg shadow-[var(--shadow-soft)]"
         >
           {content}
           {shortcut && <kbd className="font-mono text-[10px] text-fg-3">{shortcut}</kbd>}

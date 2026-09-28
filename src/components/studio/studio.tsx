@@ -10,7 +10,8 @@ import { Lightbox, type LightboxItem } from "@/components/assets/lightbox";
 import { BilingualPanel } from "@/components/prompt-desk/bilingual-panel";
 import { type Baseline, DeskTabs, type DeskTab, DiffPanel, DocChip, SettingsCard } from "@/components/prompt-desk/desk-panels";
 import { type EditorMark, PromptEditor } from "@/components/prompt-desk/prompt-editor";
-import { type DeskDoc, SaveVersionDialog, VersionList } from "@/components/prompt-desk/versions";
+import { type CutDocView, CutVersionDialog, type DeskDoc, SaveToLibraryDialog, VersionList } from "@/components/prompt-desk/versions";
+import { ShareDialog } from "@/components/prompts/share-dialog";
 import { PromptLibraryDialog } from "@/components/prompts/prompt-dialogs";
 import { useShell } from "@/components/shell/app-shell";
 import { ModelPicker, ProviderTag, type ModelStatus } from "@/components/studio/model-picker";
@@ -27,8 +28,9 @@ import {
   usePushGenerations,
   type GenerationDTO,
 } from "@/lib/client/generations";
-import { convertPromptRequest, type PromptDocDTO, type Suggestion, usePrimeTranslation, useTranslation } from "@/lib/client/prompt-tools";
+import { convertPromptRequest, type Suggestion, usePrimeTranslation, useTranslation } from "@/lib/client/prompt-tools";
 import { useDualMonitor } from "@/lib/client/studio-channel";
+import { useIsClient } from "@/lib/client/use-is-client";
 import { useResultsView } from "@/lib/client/use-results-view";
 import { defaultParams, IMAGE_MODELS, sanitizeParams, VIDEO_MODELS } from "@/lib/models/registry";
 import type { ModelDef } from "@/lib/models/types";
@@ -111,8 +113,9 @@ export function Studio({
   const [libraryOpen, setLibraryOpen] = React.useState(false);
 
   // 프롬프트 데스크
-  const [doc, setDoc] = React.useState<DeskDoc | null>(prefill.doc ?? null);
   const [saveOpen, setSaveOpen] = React.useState(false);
+  const [librarySaveOpen, setLibrarySaveOpen] = React.useState(false);
+  const [sendPresetId, setSendPresetId] = React.useState<string | null>(null);
   const [tab, setTab] = React.useState<DeskTab>("ko");
   const [pasteBase, setPasteBase] = React.useState<string | null>(null);
   const [lastSubmitted, setLastSubmitted] = React.useState<string | null>(null);
@@ -159,7 +162,7 @@ export function Studio({
   }, [kind, modelId, paramsByModel, count, projectId, cutByProject]);
 
   // 이 프로젝트의 컷
-  const { data: cutOptions = [] } = useQuery({
+  const { data: cutOptions = [], isFetched: cutOptionsFetched } = useQuery({
     queryKey: ["cut-options", projectId],
     queryFn: () => fetchJson<{ items: { id: string; code: string; title: string | null }[] }>(`/api/projects/${projectId}/cuts?lite=1`).then((r) => r.items),
     enabled: !!projectId,
@@ -167,6 +170,31 @@ export function Studio({
   });
   const cutId = cutChoice !== "none" && cutOptions.some((c) => c.id === cutChoice) ? cutChoice : null;
   const cutCode = cutOptions.find((c) => c.id === cutId)?.code ?? null;
+
+  // 컷 작업 기록: 이 컷(컷 없이면 프로젝트) 안에서만 버전이 올라가요
+  const cutDoc = useQuery({
+    queryKey: ["cut-doc", projectId, cutId, kind],
+    queryFn: () => fetchJson<CutDocView>(`/api/cut-docs?${new URLSearchParams({ projectId, kind, ...(cutId ? { cutId } : {}) })}`),
+    enabled: !!projectId && (cutChoice === "none" || cutOptionsFetched),
+    staleTime: 10_000,
+  });
+  const currentProject = projects.find((p) => p.id === projectId);
+  const docLabel = cutCode ?? (currentProject?.isPersonal ? "내 작업공간" : (currentProject?.name ?? "프로젝트"));
+  const ctxKey = `${projectId}:${cutId ?? "-"}:${kind}`;
+  const [loadedVersion, setLoadedVersion] = React.useState<{ key: string; version: number; text: string } | null>(null);
+  const loaded = loadedVersion?.key === ctxKey ? loadedVersion : null;
+  const docData = cutDoc.data?.doc ?? null;
+  // 컷을 열면 그 컷의 최신 버전으로 이어서 (에디터가 비었거나, 앞서 불러온 글을 손대지 않았을 때만)
+  const [autoLoaded, setAutoLoaded] = React.useState<{ key: string; text: string } | null>(null);
+  if (cutDoc.data && !cutDoc.isFetching && autoLoaded?.key !== ctxKey) {
+    const base = cutDoc.data.doc?.baseText ?? null;
+    const untouched = !prompt.trim() || (autoLoaded !== null && prompt === autoLoaded.text);
+    setAutoLoaded({ key: ctxKey, text: base && untouched ? base : prompt });
+    if (base && untouched && base !== prompt) setPrompt(base);
+  }
+  const doc: DeskDoc | null = docData
+    ? { id: docData.id, title: docLabel, version: docData.version, visibility: "private", canAddVersion: docData.canAddVersion, baseText: loaded?.text ?? docData.baseText, baseVersion: loaded?.version }
+    : null;
   async function addCut() {
     try {
       const r = await fetchJson<{ items: { id: string; code: string }[] }>(`/api/projects/${projectId}/cuts`, { method: "POST", body: JSON.stringify({ count: 1 }) });
@@ -282,10 +310,13 @@ export function Studio({
         count: effectiveCount,
         projectId,
         cutId,
+        recordVersion: true,
       });
       push(res.generations);
       dual.post({ type: "submitted", kind, generations: res.generations });
       setLastSubmitted(prompt);
+      setLoadedVersion(null);
+      void qc.invalidateQueries({ queryKey: ["cut-doc"] });
       router.refresh();
       toast.success(`${model.shortName} 생성을 시작했어요`, { description: `${res.generations.length}건 · 예상 ${usd(estimateMicros)}${dual.active ? " · 결과 창에서 확인" : ""}` });
     } catch (e) {
@@ -320,6 +351,7 @@ export function Studio({
     enabled: !dual.active,
   });
   const { data: active = [] } = useActiveGenerations();
+  const isClient = useIsClient();
 
   const merged = React.useMemo(() => {
     const map = new Map<string, GenerationDTO>();
@@ -489,12 +521,19 @@ export function Studio({
     return s.added + s.removed;
   }, [activeBaseline, prompt]);
 
-  async function linkDoc(id: string) {
+  /** 보내기: 지금 글을 이 컷의 버전으로 남기고, 그걸 보내요 (서버가 라이브러리 사본을 만들어 보내요) */
+  async function sendCurrent() {
+    if (!prompt.trim()) return;
     try {
-      const r = await fetchJson<{ doc: PromptDocDTO; prompt: string }>(`/api/prompts/${id}`);
-      setDoc({ id: r.doc.id, title: r.doc.title, version: r.doc.latestVersion, visibility: r.doc.visibility, canAddVersion: r.doc.canAddVersion, baseText: r.prompt });
-    } catch {
-      // 연결 실패해도 프롬프트 사용은 가능
+      const r = await fetchJson<{ docId: string; version: number }>("/api/cut-docs", {
+        method: "POST",
+        body: JSON.stringify({ projectId, cutId, kind, prompt, modelId: model.id, params }),
+      });
+      void qc.invalidateQueries({ queryKey: ["cut-doc"] });
+      setLoadedVersion(null);
+      setSendPresetId(r.docId);
+    } catch (e) {
+      toast.error((e as Error).message);
     }
   }
 
@@ -575,7 +614,10 @@ export function Studio({
       {tab === "diff" && <DiffPanel baselines={baselines} active={activeBaseline} onPick={setCompare} current={prompt} />}
       {tab === "versions" && (
         <VersionList
-          doc={doc}
+          view={cutDoc.data}
+          loading={cutDoc.isLoading}
+          label={docLabel}
+          baseVersion={loaded?.version ?? null}
           currentText={prompt}
           compareVersion={compare?.key.startsWith("v") ? Number(compare.key.slice(1)) : null}
           onCompare={(v) => {
@@ -585,7 +627,7 @@ export function Studio({
           onLoad={(v) => {
             const before = prompt;
             setPrompt(v.prompt);
-            if (doc) setDoc({ ...doc, baseText: v.prompt, baseVersion: v.version });
+            setLoadedVersion({ key: ctxKey, version: v.version, text: v.prompt });
             if (v.modelId && v.params && models.some((m) => m.id === v.modelId)) {
               setModelId(v.modelId);
               setParamsByModel((p) => ({ ...p, [v.modelId!]: v.params! }));
@@ -607,7 +649,7 @@ export function Studio({
               {/* 머리글 */}
               <div className="flex items-center gap-2">
                 <span className="eyebrow flex items-center gap-2">
-                  <span className="size-1.5 rounded-full" style={{ background: kind === "image" ? "#ff5b24" : "#5b4bff" }} />
+                  <span className="size-1.5 rounded-full shadow-[0_0_8px_currentColor]" style={{ background: kind === "image" ? "var(--accent)" : "var(--info)", color: kind === "image" ? "var(--accent)" : "var(--info)" }} />
                   {kind === "image" ? "Image Studio" : "Video Studio"}
                 </span>
                 <ProviderTag status={st} />
@@ -657,7 +699,17 @@ export function Studio({
                   setTab("diff");
                   toast("새 버전을 붙여넣었어요 — 달라진 부분을 표시했어요.");
                 }}
-                header={<DocChip doc={doc} text={prompt} onSave={() => setSaveOpen(true)} onVersions={() => setTab("versions")} />}
+                header={
+                  <DocChip
+                    label={docLabel}
+                    doc={doc}
+                    text={prompt}
+                    onSave={() => setSaveOpen(true)}
+                    onVersions={() => setTab("versions")}
+                    onSaveToLibrary={() => setLibrarySaveOpen(true)}
+                    onSend={() => void sendCurrent()}
+                  />
+                }
                 footer={
                   <div className="flex flex-wrap items-center gap-1">
                     <Tip content="예시 프롬프트">
@@ -788,7 +840,7 @@ export function Studio({
         <section className="min-w-0 p-4 sm:p-6">
           <div className="mb-4 flex items-center gap-2">
             <span className="eyebrow">Results</span>
-            {active.filter((g) => g.kind === kind && isActive(g)).length > 0 && (
+            {isClient && active.filter((g) => g.kind === kind && isActive(g)).length > 0 && (
               <span className="flex items-center gap-1.5 text-[11.5px] text-fg-3">
                 <span className="size-1.5 animate-pulse-dot rounded-full bg-accent" /> 생성 중 {active.filter((g) => g.kind === kind && isActive(g)).length}건
               </span>
@@ -840,10 +892,27 @@ export function Studio({
           setPrompt(p.prompt);
           if (p.modelId && models.some((m) => m.id === p.modelId)) setModelId(p.modelId);
           if (p.modelId && p.params) setParamsByModel((x) => ({ ...x, [p.modelId!]: p.params! }));
-          void linkDoc(p.id);
+          toast(`‘${p.title}’을(를) 불러왔어요`, { description: `생성하면 ${docLabel}의 새 버전으로 남아요.` });
         }}
       />
-      <SaveVersionDialog open={saveOpen} onOpenChange={setSaveOpen} doc={doc} text={prompt} kind={kind} modelId={model.id} params={params} onSaved={setDoc} />
+      <CutVersionDialog
+        open={saveOpen}
+        onOpenChange={setSaveOpen}
+        ctx={{ projectId, cutId, kind, label: docLabel }}
+        nextVersion={(docData?.version ?? 0) + 1}
+        text={prompt}
+        modelId={model.id}
+        params={params}
+        onSaved={() => setLoadedVersion(null)}
+      />
+      <SaveToLibraryDialog open={librarySaveOpen} onOpenChange={setLibrarySaveOpen} text={prompt} kind={kind} modelId={model.id} params={params} />
+      <ShareDialog
+        open={!!sendPresetId}
+        onOpenChange={(v) => !v && setSendPresetId(null)}
+        presetId={sendPresetId}
+        askTitle
+        defaultTitle={prompt.replace(/\s+/g, " ").trim().slice(0, 36)}
+      />
     </div>
   );
 }

@@ -1,49 +1,79 @@
 "use client";
 
-import { AtSign, ChevronDown, FileText, GitCompareArrows, History, Languages, Link2, Save } from "lucide-react";
+import { AtSign, BookmarkPlus, ChevronDown, GitCompareArrows, History, Languages, MoreHorizontal, Save, Send } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import * as React from "react";
 
 import { DiffBadge, DiffView } from "@/components/prompt-desk/diff-view";
-import { copyShareLink, type DeskDoc } from "@/components/prompt-desk/versions";
+import type { DeskDoc } from "@/components/prompt-desk/versions";
 import { Button, Spinner } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/controls";
-import { Tip } from "@/components/ui/menu";
+import { Menu, MenuContent, MenuItem, MenuTrigger, Tip } from "@/components/ui/menu";
 import { diffStats, diffWords } from "@/lib/prompt/diff";
 import { cn } from "@/lib/utils";
 
 export type DeskTab = "ko" | "mentions" | "diff" | "versions";
 export type Baseline = { key: string; label: string; text: string };
 
-/** 편집기 상단: 지금 편집 중인 프롬프트 문서와 버전 */
-export function DocChip({ doc, text, onSave, onVersions }: { doc: DeskDoc | null; text: string; onSave: () => void; onVersions: () => void }) {
+/**
+ * 편집기 상단: 지금 작업 중인 컷과 버전. 버전은 이 컷 안에서만 올라가요.
+ * 라이브러리 저장·보내기는 메뉴에서.
+ */
+export function DocChip({
+  label,
+  doc,
+  text,
+  onSave,
+  onVersions,
+  onSaveToLibrary,
+  onSend,
+}: {
+  label: string;
+  doc: DeskDoc | null;
+  text: string;
+  onSave: () => void;
+  onVersions: () => void;
+  onSaveToLibrary: () => void;
+  onSend: () => void;
+}) {
   const dirty = doc ? doc.baseText !== text : text.trim().length > 0;
   return (
     <div className="flex min-w-0 items-center gap-1.5">
       <button
         type="button"
         onClick={onVersions}
-        className="flex min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 text-left transition hover:bg-panel-2"
-        title="버전 기록 보기"
+        className="flex min-w-0 items-center gap-2 rounded-full px-2 py-1 text-left transition hover:bg-white/[0.05]"
+        title="이 컷의 버전 기록"
       >
-        <FileText className="size-4 shrink-0 text-fg-3" />
-        <span className="truncate text-[13px] font-medium">{doc ? doc.title : "새 프롬프트"}</span>
-        {doc && <span className="shrink-0 rounded-md bg-panel-3 px-1.5 py-0.5 font-mono text-[10.5px] text-fg-2">v{doc.baseVersion ?? doc.version}</span>}
+        <History className="size-3.5 shrink-0 text-fg-3" />
+        <span className="truncate font-mono text-[12.5px] tracking-[0.02em] text-fg">{label}</span>
+        {doc ? (
+          <span className="shrink-0 rounded-full border border-accent/40 bg-accent/10 px-1.5 py-px font-mono text-[10.5px] text-accent">v{doc.baseVersion ?? doc.version}</span>
+        ) : (
+          <span className="shrink-0 text-[11px] text-fg-4">버전 없음</span>
+        )}
         {doc && dirty && <DiffBadge from={doc.baseText} to={text} />}
-        {!doc && dirty && <span className="shrink-0 text-[11px] text-fg-4">저장 안 됨</span>}
       </button>
-      <Tip content={doc ? `v${doc.version + 1}로 저장` : "프롬프트 저장"} shortcut="⌘S">
-        <Button variant={dirty ? "secondary" : "ghost"} size="icon-xs" onClick={onSave} disabled={!text.trim()} aria-label="저장">
+      <Tip content={`${label}에 버전 저장`} shortcut="⌘S">
+        <Button variant={dirty ? "secondary" : "ghost"} size="icon-xs" onClick={onSave} disabled={!text.trim()} aria-label="버전 저장">
           <Save />
         </Button>
       </Tip>
-      {doc && (
-        <Tip content="공유 링크 복사">
-          <Button variant="ghost" size="icon-xs" onClick={() => copyShareLink(doc.id)} aria-label="공유 링크 복사">
-            <Link2 />
+      <Menu>
+        <MenuTrigger asChild>
+          <Button variant="ghost" size="icon-xs" aria-label="더보기" disabled={!text.trim()}>
+            <MoreHorizontal />
           </Button>
-        </Tip>
-      )}
+        </MenuTrigger>
+        <MenuContent align="end" className="w-[220px]">
+          <MenuItem onSelect={onSaveToLibrary}>
+            <BookmarkPlus /> 라이브러리에 저장
+          </MenuItem>
+          <MenuItem onSelect={onSend}>
+            <Send /> 동료·팀에게 보내기
+          </MenuItem>
+        </MenuContent>
+      </Menu>
     </div>
   );
 }
@@ -89,7 +119,7 @@ export function DeskTabs({
     { id: "versions", label: "버전 기록", icon: History, extra: versionLabel ? <span className="font-mono text-[10.5px] text-fg-4">{versionLabel}</span> : null },
   ];
   return (
-    <div className={cn("flex flex-col rounded-2xl border border-line bg-panel/70", className)}>
+    <div className={cn("flex flex-col rounded-2xl border border-line bg-white/[0.015]", className)}>
       <div role="tablist" className="flex items-center gap-1 overflow-x-auto border-b border-line px-2 scrollbar-none">
         {items.map((it) => {
           const Icon = it.icon;
@@ -106,7 +136,7 @@ export function DeskTabs({
               <Icon className="size-3.5" />
               {it.label}
               {it.extra}
-              {active && <motion.span layoutId="desk-tab" className="absolute inset-x-1.5 -bottom-px h-[2px] rounded-full bg-accent" transition={{ type: "spring", stiffness: 500, damping: 38 }} />}
+              {active && <motion.span layoutId="desk-tab" className="absolute inset-x-1.5 -bottom-px h-px bg-accent shadow-[0_0_10px_var(--accent-glow)]" transition={{ type: "spring", stiffness: 500, damping: 38 }} />}
             </button>
           );
         })}
@@ -174,7 +204,7 @@ export function DiffPanel({ baselines, active, onPick, current }: { baselines: B
 export function SettingsCard({ summary, children, defaultOpen = true }: { summary: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = React.useState(defaultOpen);
   return (
-    <div className="rounded-2xl border border-line bg-panel/60">
+    <div className="rounded-2xl border border-line bg-white/[0.015]">
       <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-3 px-4 py-3 text-left" aria-expanded={open}>
         <span className="text-[13px] font-semibold">생성 설정</span>
         <span className="min-w-0 flex-1 truncate text-[12px] text-fg-4">{summary}</span>

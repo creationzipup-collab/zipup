@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { assets, cuts, favorites, projectMembers, projects, promptPresets, user } from "@/lib/db/schema";
@@ -8,7 +8,7 @@ import { MODELS } from "@/lib/models/registry";
 import { resolveProvider } from "@/lib/providers";
 import { atLeast, computeAccess, ensurePersonalProject, visibleProjectsWhere } from "@/lib/services/access";
 import { assetDetail, toListItems } from "@/lib/services/library";
-import { canAddVersion } from "@/lib/services/prompt-docs";
+import { loadPreset } from "@/lib/services/prompt-docs";
 import { getModelConfigs } from "@/lib/services/settings";
 import type { CurrentUser } from "@/lib/session";
 
@@ -133,19 +133,8 @@ export async function studioPrefill(
 
   // 프롬프트 라이브러리에서 "스튜디오에서 사용"
   if (sp.preset) {
-    const [p] = await db
-      .select()
-      .from(promptPresets)
-      .where(
-        and(
-          eq(promptPresets.id, sp.preset),
-          or(
-            eq(promptPresets.userId, u.id),
-            eq(promptPresets.visibility, "company"),
-            u.teamId ? and(eq(promptPresets.visibility, "team"), eq(promptPresets.teamId, u.teamId)) : sql`false`,
-          ),
-        ),
-      );
+    // 공유받은 비공개 프롬프트도 열 수 있어요
+    const p = await loadPreset(u, sp.preset).catch(() => null);
     if (p) {
       out.prompt = p.prompt;
       out.doc = {
@@ -153,7 +142,7 @@ export async function studioPrefill(
         title: p.title,
         version: p.latestVersion,
         visibility: p.visibility,
-        canAddVersion: canAddVersion(u, p),
+        canAddVersion: u.role !== "viewer",
         baseText: p.prompt,
       };
       if (p.modelId && MODELS.some((m) => m.id === p.modelId && m.kind === kind)) {

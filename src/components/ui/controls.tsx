@@ -13,12 +13,12 @@ export function Switch({ className, ...props }: React.ComponentProps<typeof Sw.R
   return (
     <Sw.Root
       className={cn(
-        "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-line-2 bg-panel-3 transition-colors data-[state=checked]:border-transparent data-[state=checked]:bg-inv",
+        "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-line-2 bg-white/[0.06] transition-[background,box-shadow] data-[state=checked]:border-transparent data-[state=checked]:bg-accent data-[state=checked]:shadow-[0_0_14px_-3px_var(--accent-glow)]",
         className,
       )}
       {...props}
     >
-      <Sw.Thumb className="block size-4 translate-x-0.5 rounded-full bg-fg-2 shadow transition-transform data-[state=checked]:translate-x-[17px] data-[state=checked]:bg-inv-fg" />
+      <Sw.Thumb className="block size-4 translate-x-0.5 rounded-full bg-fg-2 shadow transition-transform data-[state=checked]:translate-x-[17px] data-[state=checked]:bg-white" />
     </Sw.Root>
   );
 }
@@ -28,10 +28,10 @@ export function Switch({ className, ...props }: React.ComponentProps<typeof Sw.R
 export function Slider({ className, ...props }: React.ComponentProps<typeof Sl.Root>) {
   return (
     <Sl.Root className={cn("relative flex h-5 w-full touch-none select-none items-center", className)} {...props}>
-      <Sl.Track className="relative h-1 grow overflow-hidden rounded-full bg-panel-3">
-        <Sl.Range className="absolute h-full bg-fg" />
+      <Sl.Track className="relative h-[3px] grow overflow-hidden rounded-full bg-white/[0.08]">
+        <Sl.Range className="absolute h-full bg-accent shadow-[0_0_10px_var(--accent-glow)]" />
       </Sl.Track>
-      <Sl.Thumb className="block size-4 rounded-full border-2 border-fg bg-bg shadow transition-transform hover:scale-110 focus-visible:outline-none" />
+      <Sl.Thumb className="block size-4 rounded-full border border-white/70 bg-white shadow-[0_0_0_4px_rgb(255_255_255/0.06)] transition-transform hover:scale-110 focus-visible:outline-none" />
     </Sl.Root>
   );
 }
@@ -59,7 +59,7 @@ export function Select({
     <S.Root value={value} onValueChange={onValueChange} disabled={disabled}>
       <S.Trigger
         className={cn(
-          "inline-flex items-center justify-between gap-2 rounded-[10px] border border-line-2 bg-panel-2/70 px-3 text-left text-sm text-fg outline-none transition hover:border-line-3 data-[placeholder]:text-fg-4",
+          "inline-flex items-center justify-between gap-2 rounded-[10px] border border-line-2 bg-white/[0.03] px-3 text-left text-sm text-fg outline-none transition hover:border-line-3 data-[state=open]:border-accent/60 data-[placeholder]:text-fg-4",
           size === "sm" ? "h-8 text-[13px]" : "h-10",
           className,
         )}
@@ -73,14 +73,14 @@ export function Select({
         <S.Content
           position="popper"
           sideOffset={6}
-          className="z-50 max-h-[min(360px,var(--radix-select-content-available-height))] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-xl border border-line-2 bg-elevated/95 p-1 shadow-[var(--shadow-pop)] backdrop-blur-xl"
+          className="glass-strong z-50 max-h-[min(360px,var(--radix-select-content-available-height))] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-xl p-1 shadow-[var(--shadow-pop)]"
         >
           <S.Viewport>
             {options.map((o) => (
               <S.Item
                 key={o.value}
                 value={o.value}
-                className="relative flex h-8 cursor-default select-none items-center gap-2 rounded-lg pl-7 pr-3 text-[13px] text-fg-2 outline-none data-[highlighted]:bg-panel-3 data-[highlighted]:text-fg"
+                className="relative flex h-8 cursor-default select-none items-center gap-2 rounded-lg pl-7 pr-3 text-[13px] text-fg-2 outline-none data-[highlighted]:bg-white/[0.07] data-[highlighted]:text-fg"
               >
                 <S.ItemIndicator className="absolute left-2">
                   <Check className="size-3.5" />
@@ -109,7 +109,7 @@ export function TabsTrigger({ className, ...props }: React.ComponentProps<typeof
   return (
     <Tb.Trigger
       className={cn(
-        "relative -mb-px inline-flex h-10 items-center gap-2 border-b-2 border-transparent px-3 text-sm text-fg-3 transition hover:text-fg-2 data-[state=active]:border-fg data-[state=active]:text-fg [&_svg]:size-4",
+        "relative -mb-px inline-flex h-10 items-center gap-2 border-b border-transparent px-3 text-sm text-fg-3 transition hover:text-fg-2 data-[state=active]:border-accent data-[state=active]:text-fg data-[state=active]:shadow-[0_1px_0_0_var(--accent),0_6px_14px_-8px_var(--accent-glow)] [&_svg]:size-4",
         className,
       )}
       {...props}
@@ -138,7 +138,7 @@ export function Segmented<T extends string>({
   return (
     <div
       role="radiogroup"
-      className={cn("inline-flex items-center gap-0.5 rounded-[10px] border border-line bg-panel-2/60 p-0.5", className)}
+      className={cn("inline-flex items-center gap-0.5 rounded-full border border-line-2 bg-white/[0.03] p-0.5", className)}
     >
       {options.map((o) => {
         const active = o.value === value;
@@ -152,17 +152,17 @@ export function Segmented<T extends string>({
             title={o.hint}
             onClick={() => onChange(o.value)}
             className={cn(
-              "relative flex-1 whitespace-nowrap rounded-lg font-medium transition-colors disabled:opacity-40",
+              "relative flex-1 whitespace-nowrap rounded-full font-medium transition-colors disabled:opacity-40",
               size === "xs" && "h-6 px-2 text-[11.5px]",
-              size === "sm" && "h-7 px-2.5 text-[12.5px]",
-              size === "md" && "h-8 px-3 text-[13px]",
+              size === "sm" && "h-7 px-3 text-[12.5px]",
+              size === "md" && "h-8 px-3.5 text-[13px]",
               active ? "text-inv-fg" : "text-fg-3 hover:text-fg",
             )}
           >
             {active && (
               <motion.span
                 layoutId={layoutId ?? `seg-${id}`}
-                className="absolute inset-0 rounded-lg bg-inv shadow-sm"
+                className="absolute inset-0 rounded-full bg-inv shadow-[inset_0_1px_0_rgb(255_255_255/0.7)]"
                 transition={{ type: "spring", bounce: 0.18, duration: 0.35 }}
               />
             )}

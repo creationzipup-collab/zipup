@@ -3,7 +3,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 export const inputClass =
-  "w-full rounded-[10px] border border-line-2 bg-panel-2/70 px-3 text-sm text-fg outline-none transition-[border,box-shadow,background] placeholder:text-fg-4 hover:border-line-3 focus:border-fg-3 focus:bg-panel-2 focus:shadow-[0_0_0_3px_var(--line)] disabled:opacity-50";
+  "w-full rounded-[10px] border border-line-2 bg-white/[0.03] px-3 text-sm text-fg outline-none transition-[border,box-shadow,background] placeholder:text-fg-4 hover:border-line-3 focus:border-accent/60 focus:bg-white/[0.045] focus:shadow-[0_0_0_3px_var(--accent-soft)] disabled:opacity-50";
 
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   ({ className, ...props }, ref) => <input ref={ref} className={cn(inputClass, "h-10", className)} {...props} />,

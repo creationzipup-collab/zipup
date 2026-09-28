@@ -1,7 +1,7 @@
 import { GeistMono } from "geist/font/mono";
+import { GeistPixelCircle } from "geist/font/pixel";
 import { GeistSans } from "geist/font/sans";
 import type { Metadata, Viewport } from "next";
-import { cookies } from "next/headers";
 
 import { Providers } from "@/components/providers";
 
@@ -14,18 +14,15 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#070708" },
-    { media: "(prefers-color-scheme: light)", color: "#f5f5f3" },
-  ],
+  themeColor: "#05070a",
+  colorScheme: "dark",
   width: "device-width",
   initialScale: 1,
 };
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const theme = (await cookies()).get("zipup-theme")?.value === "light" ? "light" : "dark";
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ko" data-theme={theme} className={`${GeistMono.variable} ${GeistSans.variable}`} suppressHydrationWarning>
+    <html lang="ko" className={`${GeistMono.variable} ${GeistSans.variable} ${GeistPixelCircle.variable}`} suppressHydrationWarning>
       <body className="min-h-dvh">
         <Providers>{children}</Providers>
       </body>

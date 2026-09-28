@@ -10,7 +10,6 @@ import {
   Home,
   ImagePlus,
   LayoutGrid,
-  Moon,
   Plus,
   Settings,
   ShieldCheck,
@@ -22,7 +21,6 @@ import { Dialog as D } from "radix-ui";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 
-import { useTheme } from "@/components/providers";
 import { Kbd } from "@/components/ui/misc";
 import { fetchJson } from "@/lib/utils";
 
@@ -44,7 +42,6 @@ function useDebounced<T>(value: T, ms: number) {
 
 export function CommandPalette({ open, onOpenChange, isAdmin }: { open: boolean; onOpenChange: (v: boolean) => void; isAdmin: boolean }) {
   const router = useRouter();
-  const { toggle } = useTheme();
   const [q, setQ] = React.useState("");
   const dq = useDebounced(q.trim(), 180);
   const { data, isFetching } = useQuery({
@@ -188,18 +185,6 @@ export function CommandPalette({ open, onOpenChange, isAdmin }: { open: boolean;
                         <ShieldCheck /> 관리자
                       </Command.Item>
                     )}
-                  </Command.Group>
-                  <Command.Group heading="설정" className={group}>
-                    <Command.Item
-                      value="theme"
-                      onSelect={() => {
-                        toggle();
-                        onOpenChange(false);
-                      }}
-                      className={item}
-                    >
-                      <Moon /> 테마 전환
-                    </Command.Item>
                   </Command.Group>
                 </>
               )}

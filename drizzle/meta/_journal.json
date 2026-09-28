@@ -36,6 +36,13 @@
       "when": 1790583126290,
       "tag": "0004_cuts_takes_sharing",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790588143683,
+      "tag": "0005_prompt_hub_cut_docs",
+      "breakpoints": true
     }
   ]
 }

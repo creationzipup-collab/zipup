@@ -33,10 +33,10 @@ export function DialogContent({
   }[size];
   return (
     <D.Portal>
-      <D.Overlay className="zi-overlay fixed inset-0 z-50 bg-overlay backdrop-blur-[2px]" />
+      <D.Overlay className="zi-overlay fixed inset-0 z-50 bg-overlay backdrop-blur-[3px]" />
       <D.Content
         className={cn(
-          "zi-dialog fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] w-[calc(100vw-24px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-line-2 bg-elevated shadow-[var(--shadow-pop)] outline-none",
+          "zi-dialog glass-strong fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] w-[calc(100vw-24px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl shadow-[var(--shadow-pop)] outline-none",
           width,
           className,
         )}
@@ -55,7 +55,7 @@ export function DialogContent({
         {!title && <D.Title className="sr-only">대화상자</D.Title>}
         <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">{children}</div>
         {!hideClose && (
-          <D.Close className="absolute right-3.5 top-3.5 rounded-lg p-1.5 text-fg-3 transition hover:bg-panel-2 hover:text-fg">
+          <D.Close className="absolute right-3.5 top-3.5 rounded-full p-1.5 text-fg-3 transition hover:bg-white/[0.07] hover:text-fg">
             <X className="size-4" />
             <span className="sr-only">닫기</span>
           </D.Close>
@@ -72,7 +72,7 @@ export function DialogBody({ className, ...props }: React.HTMLAttributes<HTMLDiv
 export function DialogFooter({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("flex items-center justify-end gap-2 border-t border-line bg-panel/50 px-5 py-3.5", className)}
+      className={cn("flex items-center justify-end gap-2 border-t border-line bg-white/[0.015] px-5 py-3.5", className)}
       {...props}
     />
   );
@@ -91,7 +91,7 @@ export function SheetContent({
       <D.Overlay className="zi-overlay fixed inset-0 z-50 bg-overlay" />
       <D.Content
         className={cn(
-          "zi-sheet fixed top-0 z-50 flex h-full w-[min(440px,100vw)] flex-col border-line-2 bg-elevated shadow-[var(--shadow-pop)] outline-none",
+          "zi-sheet fixed top-0 z-50 flex h-full w-[min(440px,100vw)] flex-col border-glass-line bg-[rgb(8_11_15/0.94)] shadow-[var(--shadow-pop)] outline-none backdrop-blur-2xl",
           side === "right" ? "right-0 border-l" : "left-0 border-r",
           className,
         )}
@@ -100,7 +100,7 @@ export function SheetContent({
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <D.Title className="text-[15px] font-semibold">{title}</D.Title>
           <D.Description className="sr-only">패널</D.Description>
-          <D.Close className="rounded-lg p-1.5 text-fg-3 hover:bg-panel-2 hover:text-fg">
+          <D.Close className="rounded-full p-1.5 text-fg-3 hover:bg-white/[0.07] hover:text-fg">
             <X className="size-4" />
           </D.Close>
         </div>
