@@ -9,6 +9,8 @@ import type { GenerationStatus } from "@/lib/types";
 export type PromptData = { text: string };
 export type AssetInputData = { asset?: RefAsset };
 export type NoteData = { text: string };
+/** 리스트: 항목마다 한 번씩 돌려 여러 컷을 한 번에 */
+export type ListData = { mode: "text" | "image"; items: string[]; assets: RefAsset[] };
 export type GenData = {
   modelId: string;
   params: Record<string, unknown>;
@@ -28,8 +30,10 @@ export type CanvasCtx = {
   canEdit: boolean;
   status: Record<string, ModelStatus>;
   runNode: (id: string) => Promise<void>;
-  pickAsset: (nodeId: string, kind: "image" | "video") => void;
+  pickAsset: (nodeId: string, kind: "image" | "video", multiple?: boolean) => void;
   openAsset: (asset: RefAsset) => void;
+  /** 연결된 리스트 때문에 이 노드가 몇 번 돌아가는지 */
+  fanOut: (nodeId: string) => number;
 };
 
 export const CanvasContext = React.createContext<CanvasCtx | null>(null);

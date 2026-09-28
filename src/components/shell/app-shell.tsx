@@ -110,7 +110,8 @@ export function AppShell({
         setPaletteOpen((o) => !o);
         return;
       }
-      if (!typing && e.key === "/" && !document.querySelector("[role=dialog]")) {
+      // 노드 캔버스처럼 "/"를 직접 쓰는 화면에서는 양보
+      if (!typing && e.key === "/" && !document.querySelector("[role=dialog]") && !document.querySelector("[data-owns-slash]")) {
         e.preventDefault();
         setPaletteOpen(true);
       }

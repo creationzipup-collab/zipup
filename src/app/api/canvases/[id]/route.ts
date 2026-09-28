@@ -31,6 +31,18 @@ const Patch = z.object({
       nodes: z.array(z.unknown()).max(300),
       edges: z.array(z.unknown()).max(600),
       viewport: z.object({ x: z.number(), y: z.number(), zoom: z.number() }).optional(),
+      sketch: z
+        .array(
+          z.object({
+            id: z.string().max(40),
+            color: z.string().max(32),
+            size: z.number().min(1).max(64),
+            points: z.array(z.array(z.number()).min(2).max(3)).max(4000),
+            author: z.object({ id: z.string().max(64), name: z.string().max(80) }).nullish(),
+          }),
+        )
+        .max(800)
+        .optional(),
     })
     .optional(),
 });

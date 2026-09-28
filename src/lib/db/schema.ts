@@ -388,6 +388,8 @@ export type CanvasGraph = {
   nodes: unknown[];
   edges: unknown[];
   viewport?: { x: number; y: number; zoom: number };
+  /** 캔버스 위에 그린 스케치 (캔버스 좌표) */
+  sketch?: { id: string; color: string; size: number; points: number[][]; author?: { id: string; name: string } | null }[];
 };
 
 export const canvases = pgTable(

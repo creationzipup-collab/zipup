@@ -30,6 +30,7 @@ export default async function CanvasPage({ params }: { params: Promise<{ id: str
       }}
       canEdit={(level === "owner" || level === "editor") && u.role !== "viewer"}
       status={status}
+      me={{ id: u.id, name: u.name }}
     />
   );
 }

@@ -405,3 +405,63 @@
 .react-flow__attribution {
   display: none;
 }
+
+/* 캔버스 조작감: 끌 때 살짝 들리고, 실행 중인 노드는 테두리가 흐름 */
+.react-flow__node {
+  transition: filter 0.18s ease;
+}
+.react-flow__node.dragging {
+  filter: drop-shadow(0 22px 34px rgb(0 0 0 / 0.45));
+  z-index: 1000 !important;
+}
+.react-flow__node.dragging > div {
+  transform: scale(1.012) rotate(-0.25deg);
+  transition: transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.react-flow__node > div {
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.react-flow__edge-path {
+  transition: stroke-width 0.15s ease, opacity 0.15s ease;
+}
+.react-flow__edge:hover .react-flow__edge-path,
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke-width: 3px !important;
+}
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--accent) !important;
+}
+.react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: 6 5;
+  animation: edge-flow 0.6s linear infinite;
+}
+@keyframes edge-flow {
+  to {
+    stroke-dashoffset: -11;
+  }
+}
+.react-flow__handle {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.react-flow__handle.connectingfrom,
+.react-flow__handle.connectingto,
+.react-flow__handle.valid {
+  transform: scale(1.45);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 30%, transparent);
+}
+.react-flow__selection {
+  border-radius: 10px;
+}
+.node-running {
+  border-color: transparent !important;
+  background:
+    linear-gradient(var(--panel), var(--panel)) padding-box,
+    conic-gradient(from var(--prompt-angle), transparent 0 30%, var(--accent) 45%, #ffd2c2 50%, var(--accent) 55%, transparent 70% 100%) border-box !important;
+  animation: prompt-spin 2.4s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__edge.animated .react-flow__edge-path,
+  .node-running {
+    animation: none;
+  }
+}

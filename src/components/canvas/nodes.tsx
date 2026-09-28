@@ -8,8 +8,10 @@ import {
   FolderOpen,
   ImageIcon,
   ImagePlus,
+  ListOrdered,
   Loader2,
   Play,
+  Plus,
   StickyNote,
   Type,
   Video,
@@ -26,7 +28,7 @@ import { defaultParams, IMAGE_MODELS, sanitizeParams, VIDEO_MODELS } from "@/lib
 import { GENERATION_STATUS_LABEL } from "@/lib/types";
 import { cn, usd } from "@/lib/utils";
 
-import { PORT_COLOR, useCanvas, type AssetInputData, type GenData, type NoteData, type PortType, type PromptData } from "./canvas-context";
+import { PORT_COLOR, useCanvas, type AssetInputData, type GenData, type ListData, type NoteData, type PortType, type PromptData } from "./canvas-context";
 
 function Port({ type, id, port, top, label }: { type: "source" | "target"; id: string; port: PortType; top?: number | string; label?: string }) {
   return (
@@ -60,7 +62,9 @@ function Shell({
   children,
   className,
   right,
+  running,
 }: {
+  running?: boolean;
   selected?: boolean;
   icon: React.ReactNode;
   title: React.ReactNode;
@@ -74,6 +78,7 @@ function Shell({
       className={cn(
         "relative flex flex-col rounded-2xl border bg-panel/95 shadow-[var(--shadow-soft)] backdrop-blur-xl transition-[border,box-shadow]",
         selected ? "border-fg/50 shadow-[0_0_0_4px_var(--line)]" : "border-line-2",
+        running && "node-running",
         className,
       )}
     >
@@ -106,6 +111,131 @@ export function PromptNode({ id, data, selected }: NodeProps) {
         className="nodrag nowheel w-full resize-y bg-transparent px-3 py-2.5 text-[12.5px] leading-relaxed outline-none placeholder:text-fg-4"
       />
       <Port type="source" id="text" port="text" top="50%" label="텍스트" />
+    </Shell>
+  );
+}
+
+/* --------------------------------- 리스트 --------------------------------- */
+
+/** 항목마다 한 번씩 연결된 생성 노드를 돌려요 (예: 카메라 앵글 5개 → 5컷) */
+export function ListNode({ id, data, selected }: NodeProps) {
+  const d = data as ListData;
+  const { updateNodeData } = useReactFlow();
+  const { canEdit, pickAsset, openAsset } = useCanvas();
+  const mode = d.mode ?? "text";
+  const items = d.items?.length ? d.items : [""];
+  const assets = d.assets ?? [];
+  const filled = mode === "text" ? items.filter((t) => t.trim()).length : assets.length;
+  const refs = React.useRef<(HTMLInputElement | null)[]>([]);
+
+  const setItems = (next: string[]) => updateNodeData(id, { items: next });
+  const focus = (i: number) => requestAnimationFrame(() => refs.current[i]?.focus());
+
+  return (
+    <Shell
+      selected={selected}
+      icon={<ListOrdered />}
+      title="리스트"
+      className="w-[290px]"
+      right={
+        <span className="flex items-center gap-1.5">
+          <span className="rounded-full bg-panel-3 px-1.5 font-mono text-[10.5px] text-fg-2">{filled}개</span>
+          {canEdit && (
+            <span className="nodrag flex rounded-md border border-line-2 p-0.5">
+              {(["text", "image"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => updateNodeData(id, { mode: m })}
+                  className={cn("rounded px-1.5 text-[10.5px] transition", mode === m ? "bg-inv text-inv-fg" : "text-fg-3 hover:text-fg")}
+                >
+                  {m === "text" ? "글" : "이미지"}
+                </button>
+              ))}
+            </span>
+          )}
+        </span>
+      }
+    >
+      {mode === "text" ? (
+        <ol className="nodrag nowheel flex max-h-[280px] flex-col gap-1 overflow-y-auto p-2 scrollbar-thin">
+          {items.map((t, i) => (
+            <li key={i} className="group flex items-center gap-1.5">
+              <span className="w-5 shrink-0 text-right font-mono text-[10px] text-fg-4">{i + 1}</span>
+              <input
+                ref={(el) => {
+                  refs.current[i] = el;
+                }}
+                value={t}
+                readOnly={!canEdit}
+                placeholder={i === 0 ? "예: close-up, low angle" : "다음 항목"}
+                onChange={(e) => setItems(items.map((x, j) => (j === i ? e.target.value : x)))}
+                onPaste={(e) => {
+                  const text = e.clipboardData.getData("text");
+                  if (!text.includes("\n")) return;
+                  e.preventDefault();
+                  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+                  setItems([...items.slice(0, i), ...lines, ...items.slice(i + 1)].filter((x, j, arr) => x.trim() || j === arr.length - 1));
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    setItems([...items.slice(0, i + 1), "", ...items.slice(i + 1)]);
+                    focus(i + 1);
+                  } else if (e.key === "Backspace" && !t && items.length > 1) {
+                    e.preventDefault();
+                    setItems(items.filter((_, j) => j !== i));
+                    focus(Math.max(0, i - 1));
+                  }
+                }}
+                className="h-8 min-w-0 flex-1 rounded-lg border border-line bg-panel-2/60 px-2 text-[12px] outline-none placeholder:text-fg-4 focus:border-line-3"
+              />
+              {canEdit && items.length > 1 && (
+                <button type="button" onClick={() => setItems(items.filter((_, j) => j !== i))} className="rounded p-0.5 text-fg-4 opacity-0 transition hover:text-fg group-hover:opacity-100" aria-label="항목 삭제">
+                  <X className="size-3" />
+                </button>
+              )}
+            </li>
+          ))}
+          {canEdit && (
+            <button type="button" onClick={() => (setItems([...items, ""]), focus(items.length))} className="ml-6 flex h-7 items-center gap-1 text-[11.5px] text-fg-4 hover:text-fg-2">
+              <Plus className="size-3.5" /> 항목 추가 · 여러 줄 붙여넣기 가능
+            </button>
+          )}
+        </ol>
+      ) : (
+        <div className="nodrag grid grid-cols-4 gap-1.5 p-2">
+          {assets.map((a) => (
+            <div key={a.id} className="group relative aspect-square overflow-hidden rounded-lg border border-line">
+              <button type="button" className="block size-full" onClick={() => openAsset(a)}>
+                <MediaThumb kind={a.kind} thumb={a.urls.thumb} src={a.urls.src} autoPlayOnHover={false} />
+              </button>
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => updateNodeData(id, { assets: assets.filter((x) => x.id !== a.id) })}
+                  className="absolute right-0.5 top-0.5 flex size-4 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition group-hover:opacity-100"
+                  aria-label="빼기"
+                >
+                  <X className="size-2.5" />
+                </button>
+              )}
+            </div>
+          ))}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => pickAsset(id, "image", true)}
+              className="flex aspect-square flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-line-3 text-fg-4 transition hover:border-fg-3 hover:text-fg-2"
+            >
+              <Plus className="size-4" />
+              <span className="text-[9.5px]">추가</span>
+            </button>
+          )}
+        </div>
+      )}
+      <p className="border-t border-line px-3 py-1.5 text-[10.5px] text-fg-4">연결한 생성 노드가 항목마다 한 번씩 실행돼요</p>
+      <Port type="source" id={mode === "image" ? "image" : "text"} port={mode === "image" ? "image" : "text"} top="50%" label={mode === "image" ? "이미지 목록" : "텍스트 목록"} />
     </Shell>
   );
 }
@@ -184,7 +314,8 @@ export function VideoInputNode(props: NodeProps) {
 
 function GenNode({ id, data, selected, kind }: NodeProps & { kind: "image" | "video" }) {
   const d = data as GenData;
-  const { runNode, canEdit, status, openAsset } = useCanvas();
+  const { runNode, canEdit, status, openAsset, fanOut } = useCanvas();
+  const times = fanOut(id);
   const { updateNodeData } = useReactFlow();
   const models = kind === "image" ? IMAGE_MODELS : VIDEO_MODELS;
   const model = models.find((m) => m.id === d.modelId) ?? models[0];
@@ -225,7 +356,13 @@ function GenNode({ id, data, selected, kind }: NodeProps & { kind: "image" | "vi
       title={kind === "image" ? "이미지 생성" : "영상 생성"}
       accent={kind === "image" ? "rgb(255 91 36 / 0.22)" : "rgb(76 141 255 / 0.22)"}
       className="w-[340px]"
-      right={<span className="font-mono text-[10.5px] text-fg-3">{usd(Math.round(est * 1_000_000))}</span>}
+      running={!!running}
+      right={
+        <span className="flex items-center gap-1.5 font-mono text-[10.5px] text-fg-3">
+          {times > 1 && <span className="rounded-full bg-accent/15 px-1.5 text-accent">×{times}</span>}
+          {usd(Math.round(est * times * 1_000_000))}
+        </span>
+      }
     >
       {inputs.map((inp, i) => {
         const top = 58 + i * 22;
@@ -283,7 +420,7 @@ function GenNode({ id, data, selected, kind }: NodeProps & { kind: "image" | "vi
             className="ml-auto flex h-8 items-center gap-1.5 rounded-lg bg-inv px-3 text-[12px] font-semibold text-inv-fg transition hover:opacity-90 disabled:opacity-40"
           >
             {running ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5 fill-current" />}
-            {running ? GENERATION_STATUS_LABEL[d.status!] : "실행"}
+            {running ? GENERATION_STATUS_LABEL[d.status!] : times > 1 ? `${times}번 실행` : "실행"}
           </button>
         </div>
 
@@ -336,6 +473,7 @@ export function VideoGenNode(props: NodeProps) {
 
 export const NODE_TYPES = {
   prompt: PromptNode,
+  list: ListNode,
   note: NoteNode,
   imageInput: ImageInputNode,
   videoInput: VideoInputNode,
