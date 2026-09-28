@@ -1,10 +1,13 @@
 /**
  * 자동 파일명 규칙
- * 사용 가능한 토큰: {project} {team} {user} {model} {kind} {date} {time} {seq} {prompt} {ratio} {res} {index}
+ * 사용 가능한 토큰: {project} {cut} {take} {team} {user} {model} {kind} {date} {time} {seq} {prompt} {ratio} {res} {index}
  * 예) "{project}_{model}_{date}_{seq}" → "신제품런칭_seedream5pro_20260928_0012.png"
+ * 컷에 들어간 클립은 규칙에 {cut}이 없어도 프로젝트 이름 뒤에 컷·테이크가 붙어요 → "신제품런칭_C003_T07_…"
  */
 export const FILENAME_TOKENS: { token: string; label: string; example: string }[] = [
   { token: "{project}", label: "프로젝트 이름", example: "신제품런칭" },
+  { token: "{cut}", label: "컷 번호", example: "C003" },
+  { token: "{take}", label: "테이크", example: "T07" },
   { token: "{team}", label: "팀 이름", example: "AI제작팀" },
   { token: "{user}", label: "만든 사람", example: "홍길동" },
   { token: "{model}", label: "모델", example: "seedream5pro" },
@@ -20,6 +23,9 @@ export const FILENAME_TOKENS: { token: string; label: string; example: string }[
 
 export type NameContext = {
   project: string;
+  /** 컷 번호 (컷에 들어간 클립만) */
+  cut?: string | null;
+  take?: number | null;
   team?: string | null;
   user: string;
   model: string;
@@ -81,6 +87,8 @@ export function renderFilename(template: string, ctx: NameContext): string {
   const { date, time } = kst(ctx.date);
   const values: Record<string, string> = {
     project: ctx.project,
+    cut: ctx.cut ?? "",
+    take: ctx.take ? formatTake(ctx.take) : "",
     team: ctx.team ?? "",
     user: ctx.user,
     model: ctx.model,
@@ -93,7 +101,7 @@ export function renderFilename(template: string, ctx: NameContext): string {
     res: ctx.res ?? "",
     index: String((ctx.index ?? 0) + 1),
   };
-  let base = (template || "{project}_{model}_{date}_{seq}").replace(/\{(\w+)\}/g, (_, k: string) =>
+  let base = withCutTokens(template || "{project}_{model}_{date}_{seq}", !!ctx.cut).replace(/\{(\w+)\}/g, (_, k: string) =>
     k in values ? sanitizeSegment(values[k]) : "",
   );
   base = base
@@ -105,4 +113,25 @@ export function renderFilename(template: string, ctx: NameContext): string {
   if (!base) base = `zipup_${date}_${values.seq}`;
   if (base.length > 120) base = base.slice(0, 120).replace(/[_\-.]+$/, "");
   return `${base}.${ctx.ext.replace(/^\./, "")}`;
+}
+
+/** 테이크 표기 T01, T12, T123 */
+export function formatTake(take: number): string {
+  return `T${String(take).padStart(2, "0")}`;
+}
+
+/** 컷에 들어간 클립인데 규칙에 {cut}이 없으면 프로젝트 이름 뒤(없으면 맨 앞)에 컷·테이크를 넣어요 */
+export function withCutTokens(template: string, inCut: boolean): string {
+  if (!inCut || template.includes("{cut}")) return template;
+  const cutPart = template.includes("{take}") ? "{cut}" : "{cut}_{take}";
+  return template.includes("{project}") ? template.replace("{project}", `{project}_${cutPart}`) : `${cutPart}_${template}`;
+}
+
+/** 내보낼 때: 파일 이름 끝에 판정(OK·NG·KEEP)을 붙임 */
+export function withVerdict(filename: string, verdict: string | null | undefined): string {
+  if (!verdict) return filename;
+  const m = filename.match(/^(.*?)(\.[^.]+)?$/);
+  const base = m?.[1] ?? filename;
+  const ext = m?.[2] ?? "";
+  return `${base}_${verdict}${ext}`;
 }

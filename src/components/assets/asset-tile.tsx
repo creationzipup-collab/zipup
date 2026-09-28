@@ -1,10 +1,10 @@
 "use client";
 
-import { Ban, Check, Heart, Star } from "lucide-react";
+import { Check, Heart, Star } from "lucide-react";
 import * as React from "react";
 
 import { MediaThumb } from "@/components/assets/media";
-import { colorHex } from "@/components/assets/selection-controls";
+import { colorHex, VerdictBadge } from "@/components/assets/selection-controls";
 import { getModel } from "@/lib/models/registry";
 import type { AssetListItem } from "@/lib/services/library";
 import { cn } from "@/lib/utils";
@@ -86,18 +86,17 @@ export const AssetTile = React.memo(function AssetTile({
         <Heart className={cn("size-3.5", a.isFavorite && "fill-current drop-shadow")} />
       </button>
 
+      {/* 컷·테이크 */}
+      {a.cutCode && !(selecting || selected) && (
+        <span className="pointer-events-none absolute left-2 top-2 rounded-[5px] bg-black/55 px-1.5 py-[2px] font-mono text-[9.5px] font-medium tracking-[0.08em] text-white/90 backdrop-blur transition-opacity group-hover:opacity-0">
+          {a.cutCode}
+          {a.take ? ` · T${String(a.take).padStart(2, "0")}` : ""}
+        </span>
+      )}
+
       {/* 상태 배지 */}
       <div className="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1">
-        {a.flag === "pick" && (
-          <span className="flex size-5 items-center justify-center rounded-md bg-success text-black shadow">
-            <Check className="size-3" strokeWidth={3} />
-          </span>
-        )}
-        {a.flag === "reject" && (
-          <span className="flex size-5 items-center justify-center rounded-md bg-danger text-white shadow">
-            <Ban className="size-3" strokeWidth={2.5} />
-          </span>
-        )}
+        <VerdictBadge flag={a.flag} />
         {color && <span className="size-3 rounded-full ring-2 ring-black/30" style={{ background: color }} />}
         {a.rating > 0 && (
           <span className="flex h-5 items-center gap-0.5 rounded-md bg-black/55 px-1.5 font-mono text-[10.5px] text-white backdrop-blur">

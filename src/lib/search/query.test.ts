@@ -42,3 +42,11 @@ describe("parseQuery", () => {
     expect(isEmptyQuery(parseQuery("#tag"))).toBe(false);
   });
 });
+
+describe("컷·판정 문법", () => {
+  it("is:ok / is:ng / is:keep 과 cut:", () => {
+    const q = parseQuery("is:ok is:ng is:keep cut:c003 컷:S02_C05");
+    expect(q.flags).toEqual(["pick", "reject", "keep"]);
+    expect(q.cuts).toEqual(["C003", "S02_C05"]);
+  });
+});

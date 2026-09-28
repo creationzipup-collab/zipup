@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Check, Clapperboard, Copy, Globe, ImagePlus, Link2, Lock, Pencil, Trash2, Users } from "lucide-react";
+import { ArrowLeft, Check, Clapperboard, Copy, EyeOff, Globe, ImagePlus, Link2, Lock, Pencil, Share2, Trash2, Users } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { BilingualPanel } from "@/components/prompt-desk/bilingual-panel";
 import { DiffBadge, DiffView } from "@/components/prompt-desk/diff-view";
 import { copyShareLink } from "@/components/prompt-desk/versions";
+import { ShareDialog } from "@/components/prompts/share-dialog";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
 import { Segmented } from "@/components/ui/controls";
@@ -33,6 +34,7 @@ export function PromptDocView({ doc, versions, modelId }: { doc: PromptDocDTO; v
   const [editingTitle, setEditingTitle] = React.useState(false);
   const [title, setTitle] = React.useState(doc.title);
   const [confirm, confirmDialog] = useConfirm();
+  const [sharing, setSharing] = React.useState(false);
   const tr = useTranslation(current?.prompt ?? "", true);
   const VisIcon = VIS_ICON[doc.visibility];
   const model = modelId ? getModel(modelId) : null;
@@ -115,7 +117,34 @@ export function PromptDocView({ doc, versions, modelId }: { doc: PromptDocDTO; v
           <Button variant="secondary" size="sm" onClick={() => copyShareLink(doc.id)}>
             <Link2 /> 링크 복사
           </Button>
+          {doc.canManage &&
+            (doc.shared ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  await fetchJson(`/api/prompts/${doc.id}/share`, { method: "DELETE" }).catch((e) => toast.error((e as Error).message));
+                  toast.success("게시판에서 내렸어요.");
+                  router.refresh();
+                }}
+              >
+                <EyeOff /> 게시판에서 내리기
+              </Button>
+            ) : (
+              <Button variant="secondary" size="sm" onClick={() => setSharing(true)}>
+                <Share2 /> 게시판에 공유
+              </Button>
+            ))}
         </div>
+        <ShareDialog
+          open={sharing}
+          onOpenChange={(v) => {
+            setSharing(v);
+            if (!v) router.refresh();
+          }}
+          presetId={doc.id}
+          defaultTitle={doc.title}
+        />
       </div>
 
       {doc.canManage && (

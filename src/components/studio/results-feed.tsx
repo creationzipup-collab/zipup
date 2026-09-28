@@ -10,6 +10,7 @@ import {
   Loader2,
   MoreHorizontal,
   RefreshCw,
+  Share2,
   Sparkles,
   X,
 } from "lucide-react";
@@ -18,8 +19,9 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { aspectFrom, MediaThumb } from "@/components/assets/media";
-import { StarRating } from "@/components/assets/selection-controls";
+import { StarRating, VerdictBadge, VERDICT_STYLE } from "@/components/assets/selection-controls";
 import { Slate } from "@/components/brand/slate";
+import { ShareDialog } from "@/components/prompts/share-dialog";
 import type { LightboxItem } from "@/components/assets/lightbox";
 import { ModelSwatch, type ModelStatus } from "@/components/studio/model-picker";
 import type { RefAsset } from "@/components/studio/reference-slots";
@@ -32,7 +34,7 @@ import { downloadUrl, downloadZip, useAssetMutations } from "@/lib/client/assets
 import { useNow } from "@/lib/client/use-now";
 import { cancelGenerationRequest, isActive, usePushGenerations, type GenerationDTO } from "@/lib/client/generations";
 import { getModel, seedanceCompleteUsd, seedanceTokens } from "@/lib/models/registry";
-import { GENERATION_STATUS_LABEL } from "@/lib/types";
+import { FLAG_LABEL, GENERATION_STATUS_LABEL, type Flag } from "@/lib/types";
 import { cn, fetchJson, usd } from "@/lib/utils";
 
 type Output = GenerationDTO["outputs"][number];
@@ -240,6 +242,7 @@ function BatchCard({
         {model && <ModelSwatch model={model} className="mt-0.5 size-8" />}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            {first.cutCode && <CutChip code={first.cutCode} takes={batch.items.flatMap((g) => g.outputs.map((o) => o.take)).filter((t): t is number => !!t)} />}
             <span className="text-[13px] font-semibold">{model?.name ?? first.modelId}</span>
             {paramChips(first).map((c) => (
               <span key={c} className="rounded-md bg-panel-2 px-1.5 py-0.5 font-mono text-[10.5px] text-fg-3">
@@ -283,6 +286,19 @@ function BatchCard({
       </div>
       {running && <span className="sr-only">생성 중</span>}
     </article>
+  );
+}
+
+/** 결과 묶음 머리의 컷·테이크 표시 (C003 · T07–T08) */
+function CutChip({ code, takes }: { code: string; takes: number[] }) {
+  const t = [...takes].sort((a, b) => a - b);
+  const fmt = (n: number) => `T${String(n).padStart(2, "0")}`;
+  const range = t.length ? (t.length === 1 ? fmt(t[0]) : `${fmt(t[0])}–${fmt(t.at(-1)!)}`) : null;
+  return (
+    <span className="inline-flex h-[22px] items-center gap-1 rounded-md border border-line-2 px-1.5 font-mono text-[10.5px] font-semibold tracking-[0.06em] text-fg-2">
+      {code}
+      {range && <span className="font-normal text-fg-3">· {range}</span>}
+    </span>
   );
 }
 
@@ -360,6 +376,8 @@ function OutputTile({
   const router = useRouter();
   const { update } = useAssetMutations();
   const [rating, setRating] = React.useState(out.rating);
+  const [verdict, setVerdict] = React.useState<Flag | null>(out.flag);
+  const [sharing, setSharing] = React.useState(false);
   const [fav, setFav] = React.useState(false);
   return (
     <div
@@ -384,6 +402,39 @@ function OutputTile({
         <TileButton label="다운로드" onClick={() => downloadUrl(out.urls.download, out.filename)}>
           <Download />
         </TileButton>
+        {g.prompt && (
+          <TileButton label="프롬프트 공유 — 이 클립과 함께 게시판에" onClick={() => setSharing(true)}>
+            <Share2 />
+          </TileButton>
+        )}
+      </div>
+      <ShareDialog open={sharing} onOpenChange={setSharing} assetId={out.id} preview={{ thumb: out.kind === "image" ? out.urls.thumb : out.urls.src, kind: out.kind, prompt: g.prompt }} />
+      {(verdict || out.take) && (
+        <div className="pointer-events-none absolute left-2 top-2 z-10 flex items-center gap-1 transition-opacity group-hover:opacity-0">
+          {out.take && <span className="rounded-[5px] bg-black/55 px-1.5 py-[2px] font-mono text-[9.5px] text-white/90 backdrop-blur">T{String(out.take).padStart(2, "0")}</span>}
+          <VerdictBadge flag={verdict} />
+        </div>
+      )}
+      <div className="absolute left-2 top-2 z-10 flex gap-1 opacity-0 transition group-hover:opacity-100">
+        {(["pick", "keep", "reject"] as const).map((f) => (
+          <Tip key={f} content={f === "pick" ? "OK — 쓸 테이크" : f === "keep" ? "KEEP — 보류" : "NG — 안 씀"}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                const next = verdict === f ? null : f;
+                setVerdict(next);
+                void update([out.id], { flag: next });
+              }}
+              className={cn(
+                "h-6 rounded-md px-1.5 font-mono text-[9.5px] font-bold tracking-[0.06em] backdrop-blur transition",
+                verdict === f ? VERDICT_STYLE[f].solid : "bg-black/45 text-white/80 hover:bg-black/70",
+              )}
+            >
+              {FLAG_LABEL[f]}
+            </button>
+          </Tip>
+        ))}
       </div>
       <div className="absolute inset-x-2 bottom-2 z-10 flex items-center justify-between gap-2 opacity-0 transition group-hover:opacity-100">
         <div className="rounded-lg bg-black/45 px-1 py-0.5 backdrop-blur">

@@ -69,7 +69,7 @@ export function SaveVersionDialog({
   const [asNew, setAsNew] = React.useState(false);
   const [title, setTitle] = React.useState("");
   const [note, setNote] = React.useState("");
-  const [visibility, setVisibility] = React.useState<Visibility>("team");
+  const [visibility, setVisibility] = React.useState<Visibility>("private");
   const [saving, setSaving] = React.useState(false);
   const [wasOpen, setWasOpen] = React.useState(open);
   if (wasOpen !== open) {
@@ -78,7 +78,7 @@ export function SaveVersionDialog({
       setAsNew(!doc || !doc.canAddVersion);
       setTitle(doc ? `${doc.title} (사본)` : text.replace(/\s+/g, " ").slice(0, 36));
       setNote("");
-      setVisibility(doc?.visibility ?? "team");
+      setVisibility(doc?.visibility ?? "private");
     }
   }
   const creating = asNew || !doc;
@@ -115,7 +115,7 @@ export function SaveVersionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="sm" title={creating ? "프롬프트 저장" : `새 버전 저장 · v${(doc?.version ?? 0) + 1}`} description={creating ? "버전별로 기록되고, 팀과 링크로 공유할 수 있어요." : doc?.title}>
+      <DialogContent size="sm" title={creating ? "프롬프트 저장" : `새 버전 저장 · v${(doc?.version ?? 0) + 1}`} description={creating ? "버전별로 기록돼요. 저장만 하면 프롬프트 게시판에는 올라가지 않아요 — 올리려면 결과 클립에서 '공유'를 누르세요." : doc?.title}>
         <form onSubmit={save}>
           <DialogBody className="flex flex-col gap-4">
             {doc && doc.canAddVersion && (
@@ -137,7 +137,7 @@ export function SaveVersionDialog({
               <Input autoFocus={!creating} value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} placeholder="예: 조명을 림라이트로, 배경을 더 어둡게" />
             </Field>
             {creating && (
-              <Field label="공유">
+              <Field label="함께 다듬기" hint="팀 공개로 두면 팀원이 링크로 열어 새 버전을 더할 수 있어요 (게시판에는 안 올라가요)">
                 <Segmented value={visibility} onChange={setVisibility} options={VIS} />
               </Field>
             )}

@@ -7,6 +7,7 @@ import {
   Clapperboard,
   Copy,
   Download,
+  Share2,
   FolderInput,
   Hash,
   Heart,
@@ -25,6 +26,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { ColorLabelPicker, FlagButtons, selectionKeyAction, StarRating } from "@/components/assets/selection-controls";
+import { ShareDialog } from "@/components/prompts/share-dialog";
 import { ModelSwatch } from "@/components/studio/model-picker";
 import { Button } from "@/components/ui/button";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, Tip } from "@/components/ui/menu";
@@ -75,6 +77,7 @@ export function Lightbox({
   const qc = useQueryClient();
   const { update } = useAssetMutations();
   const [panel, setPanel] = React.useState(true);
+  const [sharing, setSharing] = React.useState(false);
   const tagInput = React.useRef<HTMLInputElement>(null);
 
   const { data: detail, refetch } = useQuery({
@@ -147,7 +150,7 @@ export function Lightbox({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[55] flex bg-[#050506]/97 text-white backdrop-blur-sm"
+      className="fixed inset-0 z-[45] flex bg-[#050506]/97 text-white backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       data-hotkeys-scope
@@ -177,6 +180,13 @@ export function Lightbox({
                 <Heart className={cn(detail?.isFavorite && "fill-current")} />
               </Button>
             </Tip>
+            {detail && (detail.prompt || detail.generation?.prompt) && (
+              <Tip content="이 클립의 프롬프트를 게시판에 공유">
+                <Button variant="ghost" size="sm" onClick={() => setSharing(true)} className="text-white/70 hover:bg-white/10 hover:text-white">
+                  <Share2 /> 공유
+                </Button>
+              </Tip>
+            )}
             <Tip content="다운로드 (자동 파일명)" shortcut="D">
               <Button variant="ghost" size="icon-sm" onClick={() => downloadUrl(item.urls.download, item.filename)} className="text-white/70 hover:bg-white/10 hover:text-white">
                 <Download />
@@ -242,8 +252,8 @@ export function Lightbox({
             <span className="h-5 w-px bg-white/10" />
             <ColorLabelPicker value={detail.colorLabel} onChange={(v) => patch({ colorLabel: v })} />
             <span className="hidden items-center gap-1 text-[10.5px] text-white/35 lg:flex">
-              <Kbd className="border-white/15 bg-white/5 text-white/50">1-5</Kbd> 별점 <Kbd className="border-white/15 bg-white/5 text-white/50">P</Kbd>
-              <Kbd className="border-white/15 bg-white/5 text-white/50">X</Kbd> 픽/탈락 <Kbd className="border-white/15 bg-white/5 text-white/50">←→</Kbd>
+              <Kbd className="border-white/15 bg-white/5 text-white/50">1-5</Kbd> 별점 <Kbd className="border-white/15 bg-white/5 text-white/50">P</Kbd> OK
+              <Kbd className="border-white/15 bg-white/5 text-white/50">K</Kbd> KEEP <Kbd className="border-white/15 bg-white/5 text-white/50">X</Kbd> NG <Kbd className="border-white/15 bg-white/5 text-white/50">←→</Kbd>
             </span>
           </div>
         )}
@@ -383,6 +393,15 @@ export function Lightbox({
                 <dl className="grid grid-cols-[88px_1fr] gap-x-3 gap-y-2 text-[12.5px]">
                   <dt className="text-fg-4">프로젝트</dt>
                   <dd className="truncate text-fg-2">{detail.projectName}</dd>
+                  {detail.cutCode && (
+                    <>
+                      <dt className="text-fg-4">컷 · 테이크</dt>
+                      <dd className="font-mono text-fg-2">
+                        {detail.cutCode}
+                        {detail.take ? ` · T${String(detail.take).padStart(2, "0")}` : ""}
+                      </dd>
+                    </>
+                  )}
                   <dt className="text-fg-4">파일</dt>
                   <dd className="truncate text-fg-2">{detail.filename}</dd>
                   <dt className="text-fg-4">크기</dt>
@@ -429,6 +448,14 @@ export function Lightbox({
             )}
           </div>
         </aside>
+      )}
+      {detail && (
+        <ShareDialog
+          open={sharing}
+          onOpenChange={setSharing}
+          assetId={detail.id}
+          preview={{ thumb: item.kind === "image" ? item.urls.thumb : item.urls.src, kind: item.kind, prompt: detail.generation?.prompt || detail.prompt }}
+        />
       )}
     </motion.div>
   );

@@ -12,7 +12,7 @@ import { requireActiveUser } from "@/lib/session";
 
 export const metadata: Metadata = { title: "프로젝트" };
 
-export default async function ProjectPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; collection?: string }> }) {
+export default async function ProjectPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; collection?: string; cut?: string }> }) {
   const u = await requireActiveUser();
   const { id } = await params;
   const sp = await searchParams;
@@ -32,8 +32,9 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     <ProjectView
       data={data}
       cover={cover}
-      initialTab={sp.tab ?? "assets"}
+      initialTab={sp.tab ?? (data.cutCount ? "cuts" : "assets")}
       initialCollection={sp.collection ?? null}
+      initialCut={sp.cut ?? null}
       canChooseTeam={u.role === "admin" || u.role === "manager"}
     />
   );

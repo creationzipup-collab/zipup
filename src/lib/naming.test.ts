@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { promptKeywords, renderFilename, sanitizeSegment } from "./naming";
+import { formatTake, promptKeywords, renderFilename, sanitizeSegment, withVerdict } from "./naming";
 
 const base = {
   project: "신제품 런칭",
@@ -59,5 +59,37 @@ describe("promptKeywords", () => {
 describe("sanitizeSegment", () => {
   it("turns spaces into dashes and trims separators", () => {
     expect(sanitizeSegment("  hello   world  ")).toBe("hello-world");
+  });
+});
+
+describe("컷·테이크가 들어간 파일명", () => {
+  const base = { project: "신제품런칭", user: "홍길동", model: "seedream5pro", kind: "image" as const, date: new Date("2026-09-28T05:30:15Z"), seq: 12, prompt: "", ext: "png" };
+
+  it("규칙에 {cut}이 없어도 프로젝트 뒤에 컷·테이크를 넣어요", () => {
+    expect(renderFilename("{project}_{model}_{date}_{seq}", { ...base, cut: "C003", take: 7 })).toBe("신제품런칭_C003_T07_seedream5pro_20260928_0012.png");
+  });
+
+  it("컷이 없으면 예전 이름 그대로", () => {
+    expect(renderFilename("{project}_{model}_{date}_{seq}", base)).toBe("신제품런칭_seedream5pro_20260928_0012.png");
+  });
+
+  it("{cut}·{take}를 직접 쓰면 그 자리에", () => {
+    expect(renderFilename("{cut}-{take}_{project}", { ...base, cut: "S02_C05", take: 12 })).toBe("S02_C05-T12_신제품런칭.png");
+  });
+
+  it("컷 토큰이 비면 구분자가 겹치지 않아요", () => {
+    expect(renderFilename("{project}_{cut}_{take}_{model}", base)).toBe("신제품런칭_seedream5pro.png");
+  });
+
+  it("내보낼 때 판정을 끝에 붙여요", () => {
+    expect(withVerdict("신제품런칭_C003_T07.mp4", "OK")).toBe("신제품런칭_C003_T07_OK.mp4");
+    expect(withVerdict("a.b.png", "NG")).toBe("a.b_NG.png");
+    expect(withVerdict("noext", "KEEP")).toBe("noext_KEEP");
+    expect(withVerdict("x.png", null)).toBe("x.png");
+  });
+
+  it("테이크 표기", () => {
+    expect(formatTake(3)).toBe("T03");
+    expect(formatTake(124)).toBe("T124");
   });
 });

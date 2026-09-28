@@ -1,4 +1,5 @@
 import { GeistMono } from "geist/font/mono";
+import { GeistSans } from "geist/font/sans";
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { cookies } from "next/headers";
@@ -35,7 +36,7 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const theme = (await cookies()).get("zipup-theme")?.value === "light" ? "light" : "dark";
   return (
-    <html lang="ko" data-theme={theme} className={`${GeistMono.variable} ${serif.variable}`} suppressHydrationWarning>
+    <html lang="ko" data-theme={theme} className={`${GeistMono.variable} ${GeistSans.variable} ${serif.variable}`} suppressHydrationWarning>
       <body className="min-h-dvh">
         <Providers>{children}</Providers>
       </body>

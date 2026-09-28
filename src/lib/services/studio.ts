@@ -3,7 +3,7 @@ import "server-only";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { assets, favorites, projectMembers, projects, promptPresets, user } from "@/lib/db/schema";
+import { assets, cuts, favorites, projectMembers, projects, promptPresets, user } from "@/lib/db/schema";
 import { MODELS } from "@/lib/models/registry";
 import { resolveProvider } from "@/lib/providers";
 import { atLeast, computeAccess, ensurePersonalProject, visibleProjectsWhere } from "@/lib/services/access";
@@ -74,6 +74,7 @@ export type StudioPrefill = {
   params?: Record<string, unknown>;
   count?: number;
   projectId?: string;
+  cutId?: string;
   inputs?: { images: RefItem[]; startFrame?: RefItem; endFrame?: RefItem; videos: RefItem[] };
   /** 프롬프트 라이브러리에서 열었을 때: 저장하면 이 프롬프트의 새 버전이 돼요 */
   doc?: { id: string; title: string; version: number; visibility: "private" | "team" | "company"; canAddVersion: boolean; baseText: string };
@@ -105,7 +106,7 @@ const uuidOrUndefined = (v?: string) => (v && UUID.test(v) ? v : undefined);
 export async function studioPrefill(
   u: CurrentUser,
   kind: "image" | "video",
-  raw: { from?: string; ref?: string; start?: string; model?: string; prompt?: string; project?: string; preset?: string },
+  raw: { from?: string; ref?: string; start?: string; model?: string; prompt?: string; project?: string; preset?: string; cut?: string },
 ): Promise<StudioPrefill> {
   // 잘못된 ID가 DB 오류로 이어지지 않도록 UUID만 통과
   const sp = {
@@ -115,11 +116,20 @@ export async function studioPrefill(
     start: uuidOrUndefined(raw.start),
     project: uuidOrUndefined(raw.project),
     preset: uuidOrUndefined(raw.preset),
+    cut: uuidOrUndefined(raw.cut),
   };
   const out: StudioPrefill = {};
   if (sp.model && MODELS.some((m) => m.id === sp.model && m.kind === kind)) out.modelId = sp.model;
   if (sp.prompt) out.prompt = sp.prompt.slice(0, 5000);
   if (sp.project) out.projectId = sp.project;
+  // 컷에서 "이 컷에서 생성"으로 들어오면 그 컷의 프로젝트로
+  if (sp.cut) {
+    const [c] = await db.select({ id: cuts.id, projectId: cuts.projectId }).from(cuts).where(eq(cuts.id, sp.cut));
+    if (c) {
+      out.cutId = c.id;
+      out.projectId = c.projectId;
+    }
+  }
 
   // 프롬프트 라이브러리에서 "스튜디오에서 사용"
   if (sp.preset) {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { handle, readJson } from "@/lib/api";
+import { moveAssetsToCut } from "@/lib/services/cuts";
 import { searchAssets } from "@/lib/services/library";
 import { purgeAssets, updateAssets } from "@/lib/services/selection";
 import { apiUser } from "@/lib/session";
@@ -19,7 +20,8 @@ export const GET = handle(async (req: Request) => {
     kind: kind === "image" || kind === "video" ? kind : undefined,
     models: list(p.get("models")),
     minRating: p.get("minRating") ? Number(p.get("minRating")) : undefined,
-    flags: list(p.get("flags")) as ("pick" | "reject" | "none")[] | undefined,
+    flags: list(p.get("flags")) as ("pick" | "reject" | "keep" | "none")[] | undefined,
+    cutId: p.get("cutId") ?? undefined,
     colors: list(p.get("colors")) as never,
     tags: list(p.get("tags")),
     mine: p.get("mine") === "1",
@@ -35,7 +37,7 @@ const PatchSchema = z.object({
   ids: z.array(z.string().uuid()).min(1).max(500),
   patch: z.object({
     rating: z.number().int().min(0).max(5).optional(),
-    flag: z.enum(["pick", "reject"]).nullable().optional(),
+    flag: z.enum(["pick", "reject", "keep"]).nullable().optional(),
     colorLabel: z.enum(["red", "orange", "yellow", "green", "blue", "purple"]).nullable().optional(),
     addTags: z.array(z.string().min(1).max(40)).max(20).optional(),
     removeTags: z.array(z.string().min(1).max(40)).max(20).optional(),
@@ -43,11 +45,17 @@ const PatchSchema = z.object({
     projectId: z.string().uuid().optional(),
     deleted: z.boolean().optional(),
   }),
+  cutId: z.string().uuid().nullable().optional(),
 });
 
 export const PATCH = handle(async (req: Request) => {
   const u = await apiUser();
-  const { ids, patch } = PatchSchema.parse(await readJson(req));
+  const { ids, patch, cutId } = PatchSchema.parse(await readJson(req));
+  // 컷으로 옮기기 (null = 컷에서 빼기)
+  if (cutId !== undefined) {
+    const moved = await moveAssetsToCut(u, ids, cutId);
+    if (!Object.keys(patch).length) return moved;
+  }
   return updateAssets(u, ids, patch);
 });
 

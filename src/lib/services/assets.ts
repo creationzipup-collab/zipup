@@ -5,10 +5,10 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { assets, assetTags, projects, tags, teams, user } from "@/lib/db/schema";
+import { assets, assetTags, cuts, projects, tags, teams, user } from "@/lib/db/schema";
 import { imageMeta, makeThumbnail, videoMeta } from "@/lib/media/process";
 import { getModel, MODEL_SLUG } from "@/lib/models/registry";
-import { renderFilename } from "@/lib/naming";
+import { formatTake, renderFilename, sanitizeSegment } from "@/lib/naming";
 import { getSettings } from "@/lib/services/settings";
 import { extFromContentType, storage } from "@/lib/storage";
 import type { AssetKind, AssetSource } from "@/lib/types";
@@ -47,17 +47,18 @@ export function buildSearchText(parts: {
 export async function refreshSearchText(assetIds: string[]) {
   if (!assetIds.length) return;
   const rows = await db
-    .select({ a: assets, projectName: projects.name, creator: user.name })
+    .select({ a: assets, projectName: projects.name, creator: user.name, cutCode: cuts.code })
     .from(assets)
     .leftJoin(projects, eq(projects.id, assets.projectId))
     .leftJoin(user, eq(user.id, assets.userId))
+    .leftJoin(cuts, eq(cuts.id, assets.cutId))
     .where(inArray(assets.id, assetIds));
   const tagRows = await db
     .select({ assetId: assetTags.assetId, name: tags.name })
     .from(assetTags)
     .innerJoin(tags, eq(tags.id, assetTags.tagId))
     .where(inArray(assetTags.assetId, assetIds));
-  for (const { a, projectName, creator } of rows) {
+  for (const { a, projectName, creator, cutCode } of rows) {
     const tagNames = tagRows.filter((t) => t.assetId === a.id).map((t) => t.name);
     await db
       .update(assets)
@@ -69,11 +70,21 @@ export async function refreshSearchText(assetIds: string[]) {
           kind: a.kind,
           source: a.source,
           tags: tagNames,
-          extra: [projectName, creator],
+          extra: [projectName, creator, cutCode],
         }),
       })
       .where(eq(assets.id, a.id));
   }
+}
+
+/** 컷의 다음 테이크 번호 (원자적 증가). 처음 테이크가 들어오면 컷을 "작업 중"으로 */
+export async function nextTake(cutId: string): Promise<number> {
+  const [row] = await db
+    .update(cuts)
+    .set({ takeSeq: sql`${cuts.takeSeq} + 1`, lastActivityAt: new Date(), status: sql`case when ${cuts.status} = 'todo' then 'wip' else ${cuts.status} end` })
+    .where(eq(cuts.id, cutId))
+    .returning({ take: cuts.takeSeq });
+  return row?.take ?? 1;
 }
 
 /** 프로젝트 순번 발급 (원자적 증가) */
@@ -105,6 +116,8 @@ export type StoreAssetInput = {
   meta?: { width?: number; height?: number; durationSec?: number };
   /** 이미 스토리지에 올라간 파일 키 (업로드) */
   existingKey?: string;
+  /** 넣을 컷 (같은 프로젝트의 컷만) */
+  cutId?: string | null;
 };
 
 /** 파일을 스토리지에 저장하고 에셋 행 생성 (썸네일·메타데이터·자동 파일명 포함) */
@@ -142,10 +155,18 @@ export async function storeAsset(input: StoreAssetInput): Promise<AssetRow> {
   const seq = await nextSeq(input.projectId);
   const settings = await getSettings();
   const params = input.params ?? {};
+  // 컷에 넣으면 테이크 번호를 받아요
+  let cut: { id: string; code: string; take: number } | null = null;
+  if (input.cutId) {
+    const [c] = await db.select({ code: cuts.code, projectId: cuts.projectId }).from(cuts).where(eq(cuts.id, input.cutId));
+    if (c && c.projectId === input.projectId) cut = { id: input.cutId, code: c.code, take: await nextTake(input.cutId) };
+  }
   const filename =
     input.source === "upload" && input.originalName
-      ? uploadName(input.originalName, ext)
+      ? (cut ? `[${sanitizeSegment(cut.code)}_${formatTake(cut.take)}]_` : "") + uploadName(input.originalName, ext)
       : renderFilename(settings.filenameTemplate, {
+          cut: cut?.code,
+          take: cut?.take,
           // 개인 작업공간은 "내 작업공간" 대신 만든 사람 이름으로 (공유·다운로드 시 알아보기 쉽게)
           project: proj?.isPersonal ? `${creator?.name ?? "user"}-개인` : (proj?.name ?? "project"),
           team: proj?.teamName,
@@ -167,6 +188,8 @@ export async function storeAsset(input: StoreAssetInput): Promise<AssetRow> {
       id,
       projectId: input.projectId,
       generationId: input.generationId ?? null,
+      cutId: cut?.id ?? null,
+      take: cut?.take ?? null,
       userId: input.userId,
       teamId: input.teamId,
       kind: input.kind,
@@ -189,7 +212,7 @@ export async function storeAsset(input: StoreAssetInput): Promise<AssetRow> {
         modelId: input.modelId,
         kind: input.kind,
         source: input.source,
-        extra: [proj?.name, creator?.name, typeof params.aspectRatio === "string" ? params.aspectRatio : null],
+        extra: [proj?.name, creator?.name, cut?.code, typeof params.aspectRatio === "string" ? params.aspectRatio : null],
       }),
     })
     .returning();

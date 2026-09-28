@@ -49,6 +49,7 @@ export async function createGenerationRequest(body: {
   inputs?: Record<string, unknown>;
   count?: number;
   projectId?: string | null;
+  cutId?: string | null;
   canvasId?: string | null;
   canvasNodeId?: string | null;
 }) {

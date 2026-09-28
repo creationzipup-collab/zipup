@@ -3,7 +3,7 @@ import "server-only";
 import { and, count, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { assets, canvases, collections, projectMembers, projects, teams, user } from "@/lib/db/schema";
+import { assets, canvases, collections, cuts, projectMembers, projects, teams, user } from "@/lib/db/schema";
 import { badRequest, forbidden } from "@/lib/errors";
 import { computeAccess, requireProject, visibleProjectsWhere } from "@/lib/services/access";
 import { assetUrls } from "@/lib/services/assets";
@@ -189,6 +189,7 @@ export async function projectOverview(u: CurrentUser, id: string) {
     .from(collections)
     .where(eq(collections.projectId, id))
     .orderBy(desc(collections.updatedAt));
+  const [{ cutCount }] = await db.select({ cutCount: sql<number>`count(*)::int` }).from(cuts).where(eq(cuts.projectId, id));
   const canvasRows = await db
     .select({ id: canvases.id, name: canvases.name, updatedAt: canvases.updatedAt })
     .from(canvases)
@@ -206,6 +207,7 @@ export async function projectOverview(u: CurrentUser, id: string) {
     teamName: team?.name ?? null,
     ownerName: owner?.name ?? "",
     stats: stats ?? { total: 0, images: 0, videos: 0, picks: 0 },
+    cutCount,
     collections: collectionRows.map((c) => ({ ...c, updatedAt: c.updatedAt.toISOString() })),
     canvases: canvasRows.map((c) => ({ ...c, updatedAt: c.updatedAt.toISOString() })),
   };

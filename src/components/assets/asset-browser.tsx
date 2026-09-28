@@ -2,10 +2,10 @@
 
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Ban,
   Bookmark,
   Check,
   ChevronDown,
+  Clapperboard,
   Columns2,
   Download,
   FolderInput,
@@ -29,7 +29,7 @@ import { toast } from "sonner";
 import { AssetTile } from "@/components/assets/asset-tile";
 import { CollectionDialog, CompareDialog, MoveDialog, TagDialog } from "@/components/assets/bulk-dialogs";
 import { Lightbox } from "@/components/assets/lightbox";
-import { selectionKeyAction } from "@/components/assets/selection-controls";
+import { selectionKeyAction, VerdictBadge } from "@/components/assets/selection-controls";
 import { PageTitle } from "@/components/brand/page-title";
 import { FinalizeDialog } from "@/components/studio/results-feed";
 import { Button } from "@/components/ui/button";
@@ -41,7 +41,7 @@ import { useActiveGenerations } from "@/lib/client/generations";
 import { MODELS } from "@/lib/models/registry";
 import { SEARCH_HELP } from "@/lib/search/query";
 import type { AssetListItem } from "@/lib/services/library";
-import { COLOR_LABELS, type ColorLabel } from "@/lib/types";
+import { COLOR_LABELS, FLAG_LABEL, type ColorLabel, type Flag } from "@/lib/types";
 import { cn, fetchJson } from "@/lib/utils";
 
 type Scope = "all" | "mine" | "fav" | "trash";
@@ -79,6 +79,7 @@ function masonry(items: AssetListItem[], cols: number) {
 export function AssetBrowser({
   projectId,
   collectionId,
+  cutId,
   canEdit = true,
   title,
   label,
@@ -89,6 +90,8 @@ export function AssetBrowser({
 }: {
   projectId?: string;
   collectionId?: string;
+  /** 컷 id 또는 "none"(컷 없는 클립) */
+  cutId?: string;
   canEdit?: boolean;
   title?: React.ReactNode;
   /** 제목 위 모노 라벨·옆 세리프 한 줄 (페이지 제목으로 쓸 때) */
@@ -110,7 +113,7 @@ export function AssetBrowser({
   const [scope, setScope] = React.useState<Scope>(sp.get("favorites") === "1" ? "fav" : sp.get("mine") === "1" ? "mine" : sp.get("trash") === "1" ? "trash" : "all");
   const [models, setModels] = React.useState<string[]>([]);
   const [minRating, setMinRating] = React.useState(0);
-  const [flags, setFlags] = React.useState<("pick" | "reject" | "none")[]>([]);
+  const [flags, setFlags] = React.useState<(Flag | "none")[]>([]);
   const [colors, setColors] = React.useState<ColorLabel[]>([]);
   const [sort, setSort] = React.useState<"newest" | "oldest" | "rating" | "relevance">("newest");
   const [size, setSize] = React.useState<Size>("m");
@@ -145,6 +148,7 @@ export function AssetBrowser({
     if (q) p.set("q", q);
     if (projectId) p.set("projectId", projectId);
     if (collectionId) p.set("collectionId", collectionId);
+    if (cutId) p.set("cutId", cutId);
     if (kind !== "all") p.set("kind", kind);
     if (scope === "mine") p.set("mine", "1");
     if (scope === "fav") p.set("favorites", "1");
@@ -154,7 +158,7 @@ export function AssetBrowser({
     if (flags.length) p.set("flags", flags.join(","));
     if (colors.length) p.set("colors", colors.join(","));
     return p.toString();
-  }, [q, projectId, collectionId, kind, scope, models, minRating, flags, colors, sort]);
+  }, [q, projectId, collectionId, cutId, kind, scope, models, minRating, flags, colors, sort]);
 
   const query = useInfiniteQuery({
     queryKey: ["assets", params],
@@ -225,6 +229,28 @@ export function AssetBrowser({
     },
     [qc, update, targetIds],
   );
+
+  // 컷으로 옮기기 (프로젝트 안에서)
+  const { data: cutOptions = [] } = useQuery({
+    queryKey: ["cut-options", projectId],
+    queryFn: () => fetchJson<{ items: { id: string; code: string; title: string | null }[] }>(`/api/projects/${projectId}/cuts?lite=1`).then((r) => r.items),
+    enabled: !!projectId && canEdit,
+    staleTime: 30_000,
+  });
+  async function moveToCut(target: string | null) {
+    const ids = targetIds();
+    if (!ids.length) return;
+    try {
+      await fetchJson("/api/assets", { method: "PATCH", body: JSON.stringify({ ids, patch: {}, cutId: target }) });
+      const code = cutOptions.find((c) => c.id === target)?.code;
+      toast.success(target ? `${ids.length}개를 ${code}(으)로 옮겼어요.` : `${ids.length}개를 컷에서 뺐어요.`);
+      setSelected(new Set());
+      void qc.invalidateQueries({ queryKey: ["assets"] });
+      void qc.invalidateQueries({ queryKey: ["cut-board"] });
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
 
   function clickTile(index: number, e: React.MouseEvent) {
     const it = items[index];
@@ -332,7 +358,7 @@ export function AssetBrowser({
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder='검색: 네온 도시 · #인물 · @홍길동 · model:seedream · ★4 · is:pick · "정확한 구문"'
+            placeholder='검색: 네온 도시 · #인물 · @홍길동 · cut:C003 · is:ok · model:seedream · "정확한 구문"'
             className="h-11 w-full rounded-xl border border-line-2 bg-panel/80 pl-10 pr-24 text-[14px] outline-none transition placeholder:text-fg-4 focus:border-fg-3 focus:bg-panel-2"
           />
           <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
@@ -396,11 +422,12 @@ export function AssetBrowser({
           ))}
         </FilterMenu>
 
-        <FilterMenu label="셀렉" count={flags.length}>
+        <FilterMenu label="판정" count={flags.length}>
           {([
-            ["pick", "픽 (채택)", <Check key="p" className="text-success" />],
-            ["reject", "탈락", <Ban key="r" className="text-danger" />],
-            ["none", "미분류", <span key="n" className="size-4" />],
+            ["pick", "OK", <VerdictBadge key="p" flag="pick" />],
+            ["keep", "KEEP (보류)", <VerdictBadge key="k" flag="keep" />],
+            ["reject", "NG", <VerdictBadge key="r" flag="reject" />],
+            ["none", "판정 안 함", <span key="n" className="w-8" />],
           ] as const).map(([v, label, icon]) => (
             <MenuCheckboxItem
               key={v}
@@ -539,8 +566,33 @@ export function AssetBrowser({
                     ))}
                   </MenuContent>
                 </Menu>
-                <Tip content="픽" shortcut="P"><Button variant="ghost" size="icon-sm" onClick={() => apply({ flag: "pick" })}><Check className="text-success" /></Button></Tip>
-                <Tip content="탈락" shortcut="X"><Button variant="ghost" size="icon-sm" onClick={() => apply({ flag: "reject" })}><Ban className="text-danger" /></Button></Tip>
+                {(["pick", "keep", "reject"] as const).map((f) => (
+                  <Tip key={f} content={FLAG_LABEL[f]} shortcut={f === "pick" ? "P" : f === "keep" ? "K" : "X"}>
+                    <Button variant="ghost" size="sm" className="px-2 font-mono text-[11px] font-semibold" onClick={() => apply({ flag: f })}>
+                      <VerdictBadge flag={f} className="shadow-none" />
+                    </Button>
+                  </Tip>
+                ))}
+                {cutOptions.length > 0 && (
+                  <Menu>
+                    <MenuTrigger asChild>
+                      <Button variant="ghost" size="sm">
+                        <Clapperboard /> 컷
+                      </Button>
+                    </MenuTrigger>
+                    <MenuContent side="top" className="max-h-[320px] overflow-y-auto">
+                      <MenuLabel>선택한 클립을 컷으로 (새 테이크 번호)</MenuLabel>
+                      {cutOptions.map((c) => (
+                        <MenuItem key={c.id} onSelect={() => void moveToCut(c.id)}>
+                          <span className="font-mono text-[12px]">{c.code}</span>
+                          {c.title && <span className="truncate text-fg-3">{c.title}</span>}
+                        </MenuItem>
+                      ))}
+                      <MenuSeparator />
+                      <MenuItem onSelect={() => void moveToCut(null)}>컷에서 빼기</MenuItem>
+                    </MenuContent>
+                  </Menu>
+                )}
                 <Menu>
                   <MenuTrigger asChild>
                     <Button variant="ghost" size="icon-sm" aria-label="컬러 라벨"><span className="size-3.5 rounded-full bg-gradient-to-br from-[#ff4d4f] via-[#f5c542] to-[#4c8dff]" /></Button>

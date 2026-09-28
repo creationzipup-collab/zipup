@@ -5,7 +5,7 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { assets, generations, projectMembers, projects, user } from "@/lib/db/schema";
+import { assets, cuts, generations, projectMembers, projects, user } from "@/lib/db/schema";
 import { env } from "@/lib/env";
 import { badRequest, forbidden, HttpError } from "@/lib/errors";
 import { downloadOutput } from "@/lib/media/process";
@@ -17,9 +17,10 @@ import { canGenerate, type CurrentUser } from "@/lib/session";
 import { atLeast, computeAccess, ensurePersonalProject, requireProject } from "@/lib/services/access";
 import { assetUrls, loadAssetsByIds, providerInputUrl, storeAsset, type AssetRow } from "@/lib/services/assets";
 import { assertBudget, getBudgetStatus } from "@/lib/services/budget";
+import { assertCutInProject } from "@/lib/services/cuts";
 import { adminIds, notify } from "@/lib/services/notifications";
 import { getModelConfigs, getSettings } from "@/lib/services/settings";
-import type { GenerationInputs, GenerationStatus, ProviderId } from "@/lib/types";
+import type { Flag, GenerationInputs, GenerationStatus, ProviderId } from "@/lib/types";
 
 export type GenerationRow = typeof generations.$inferSelect;
 
@@ -30,6 +31,8 @@ export type CreateGenerationInput = {
   inputs?: GenerationInputs;
   count?: number;
   projectId?: string | null;
+  /** 결과물을 넣을 컷 (프로젝트의 컷) */
+  cutId?: string | null;
   canvasId?: string | null;
   canvasNodeId?: string | null;
   parentGenerationId?: string | null;
@@ -89,6 +92,7 @@ export async function createGeneration(u: CurrentUser, input: CreateGenerationIn
   const project = input.projectId
     ? (await requireProject(u, input.projectId, "editor")).project
     : await ensurePersonalProject(u);
+  if (input.cutId) await assertCutInProject(input.cutId, project.id);
 
   const prompt = (input.prompt ?? "").trim().slice(0, 7000);
   const inputs: GenerationInputs = input.inputs ?? {};
@@ -185,6 +189,7 @@ export async function createGeneration(u: CurrentUser, input: CreateGenerationIn
           expectedOutputs: b.expectedOutputs,
           isDraft,
           parentGenerationId: input.parentGenerationId ?? null,
+          cutId: input.cutId ?? null,
           canvasId: input.canvasId ?? null,
           canvasNodeId: input.canvasNodeId ?? null,
         })),
@@ -250,6 +255,7 @@ export async function completeDraft(u: CurrentUser, draft: GenerationRow) {
         expectedOutputs: 1,
         isDraft: false,
         parentGenerationId: draft.id,
+        cutId: draft.cutId,
         canvasId: draft.canvasId,
         canvasNodeId: draft.canvasNodeId,
       })
@@ -538,6 +544,7 @@ async function storeOutputs(gen: GenerationRow, outputs: ProviderOutput[], costU
         modelId: gen.modelId,
         params: gen.params,
         meta: { width: o.width, height: o.height },
+        cutId: gen.cutId,
       });
       created.push(asset.id);
     }
@@ -698,6 +705,8 @@ export type GenerationDTO = {
   draftCompletable: boolean;
   draftExpiresAt: string | null;
   parentGenerationId: string | null;
+  cutId: string | null;
+  cutCode: string | null;
   canvasNodeId: string | null;
   createdAt: string;
   startedAt: string | null;
@@ -711,7 +720,8 @@ export type GenerationDTO = {
     durationSec: number | null;
     filename: string;
     rating: number;
-    flag: string | null;
+    flag: Flag | null;
+    take: number | null;
     urls: { thumb: string; src: string; download: string };
   }[];
 };
@@ -724,6 +734,10 @@ export async function toGenerationDTOs(rows: GenerationRow[]): Promise<Generatio
     .where(and(inArray(assets.generationId, rows.map((r) => r.id)), isNull(assets.deletedAt)))
     .orderBy(asc(assets.outputIndex));
   const withUrls = await Promise.all(outs.map(async (a) => ({ a, urls: await assetUrls(a) })));
+  const cutIds = Array.from(new Set(rows.map((r) => r.cutId).filter(Boolean))) as string[];
+  const cutCodes = new Map(
+    cutIds.length ? (await db.select({ id: cuts.id, code: cuts.code }).from(cuts).where(inArray(cuts.id, cutIds))).map((c) => [c.id, c.code]) : [],
+  );
   return rows.map((g) => ({
     id: g.id,
     batchId: g.batchId,
@@ -743,6 +757,8 @@ export async function toGenerationDTOs(rows: GenerationRow[]): Promise<Generatio
     draftCompletable: draftCompletable(g),
     draftExpiresAt: g.draftExpiresAt?.toISOString() ?? null,
     parentGenerationId: g.parentGenerationId,
+    cutId: g.cutId,
+    cutCode: g.cutId ? cutCodes.get(g.cutId) ?? null : null,
     canvasNodeId: g.canvasNodeId,
     createdAt: g.createdAt.toISOString(),
     startedAt: g.startedAt?.toISOString() ?? null,
@@ -759,6 +775,7 @@ export async function toGenerationDTOs(rows: GenerationRow[]): Promise<Generatio
         filename: a.filename,
         rating: a.rating,
         flag: a.flag,
+        take: a.take,
         urls,
       })),
   }));

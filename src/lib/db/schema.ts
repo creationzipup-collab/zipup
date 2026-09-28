@@ -19,6 +19,7 @@ import type {
   AssetKind,
   AssetSource,
   ColorLabel,
+  CutStatus,
   Flag,
   GenerationInputs,
   GenerationStatus,
@@ -228,6 +229,8 @@ export const generations = pgTable(
     /** 공급자가 사용한 시드 (재현용) */
     seed: bigint({ mode: "number" }),
     parentGenerationId: uuid(),
+    /** 결과물을 넣을 컷 (없으면 프로젝트에 바로) */
+    cutId: uuid(),
     canvasId: uuid(),
     canvasNodeId: text(),
     submitAttempts: integer().notNull().default(0),
@@ -247,7 +250,42 @@ export const generations = pgTable(
     index().on(t.batchId),
     index().on(t.providerRequestId),
     index().on(t.canvasId),
+    index().on(t.cutId, t.status),
   ],
+);
+
+/* -------------------------------------------------------------------------- */
+/*                                    Cuts                                    */
+/* -------------------------------------------------------------------------- */
+
+/** 프로젝트 안의 컷(샷). 클립은 컷마다 테이크 번호를 받아요. 컷 없이 쓰는 프로젝트도 있어요. */
+export const cuts = pgTable(
+  "cuts",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    projectId: uuid()
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** 컷 번호 (C001, S02_C05 …) — 프로젝트 안에서 고유 */
+    code: text().notNull(),
+    title: text(),
+    /** 연출 메모 */
+    note: text(),
+    status: text().$type<CutStatus>().notNull().default("todo"),
+    /** 담당 */
+    assigneeId: text().references(() => user.id, { onDelete: "set null" }),
+    position: integer().notNull().default(0),
+    /** 테이크 번호 발급용 */
+    takeSeq: integer().notNull().default(0),
+    /** 대표 테이크 */
+    coverAssetId: uuid(),
+    createdBy: text()
+      .notNull()
+      .references(() => user.id),
+    lastActivityAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    ...timestamps,
+  },
+  (t) => [index().on(t.projectId, t.position), uniqueIndex("cuts_project_code_uq").on(t.projectId, t.code), index().on(t.assigneeId)],
 );
 
 export const assets = pgTable(
@@ -258,6 +296,10 @@ export const assets = pgTable(
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
     generationId: uuid().references(() => generations.id, { onDelete: "set null" }),
+    /** 속한 컷 (없으면 프로젝트에 바로) */
+    cutId: uuid().references(() => cuts.id, { onDelete: "set null" }),
+    /** 컷 안의 테이크 번호 (T01, T02 …) */
+    take: integer(),
     userId: text()
       .notNull()
       .references(() => user.id),
@@ -289,6 +331,7 @@ export const assets = pgTable(
     index().on(t.userId, t.createdAt),
     index().on(t.teamId, t.createdAt),
     index().on(t.generationId),
+    index().on(t.cutId, t.take),
     index().on(t.createdAt),
     index("assets_search_trgm_idx").using("gin", sql`${t.searchText} gin_trgm_ops`),
   ],
@@ -424,7 +467,7 @@ export const promptPresets = pgTable(
     modelId: text(),
     params: jsonb().$type<Record<string, unknown>>(),
     tags: text().array().notNull().default(sql`'{}'::text[]`),
-    visibility: text().$type<Visibility>().notNull().default("team"),
+    visibility: text().$type<Visibility>().notNull().default("private"),
     userId: text()
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -432,9 +475,14 @@ export const promptPresets = pgTable(
     useCount: integer().notNull().default(0),
     /** 최신 버전 번호 (prompt 컬럼은 항상 최신 버전 내용) */
     latestVersion: integer().notNull().default(1),
+    /** 직접 "공유"한 때 — 이 값이 있어야 프롬프트 게시판에 떠요 (저장만 한 건 안 뜸) */
+    sharedAt: timestamp({ withTimezone: true }),
+    sharedBy: text().references(() => user.id, { onDelete: "set null" }),
+    /** 이 프롬프트로 나온 클립 (게시판 썸네일) */
+    sourceAssetId: uuid().references(() => assets.id, { onDelete: "set null" }),
     ...timestamps,
   },
-  (t) => [index().on(t.userId), index().on(t.teamId)],
+  (t) => [index().on(t.userId), index().on(t.teamId), index().on(t.sharedAt)],
 );
 
 /** 프롬프트 버전 기록 (저장할 때마다 v1, v2 …) */

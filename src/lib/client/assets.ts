@@ -50,10 +50,11 @@ export function downloadUrl(url: string, filename?: string) {
 }
 
 /** 여러 파일을 ZIP으로 (브라우저에서 스트리밍 압축) */
-export async function downloadZip(items: { url: string; filename: string }[], zipName: string) {
+export async function downloadZip(items: { url: string; filename: string }[], zipName: string, extra: { name: string; text: string }[] = []) {
   const { downloadZip: dz } = await import("client-zip");
   const used = new Set<string>();
   const files = async function* () {
+    for (const x of extra) yield { name: x.name, input: x.text, lastModified: new Date() };
     for (const it of items) {
       let name = it.filename;
       let i = 1;

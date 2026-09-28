@@ -14,7 +14,8 @@ import { expandTerm } from "./synonyms";
  *   model:seedream  모델:나노바나나
  *   project:신제품  프로젝트:신제품
  *   team:기획팀  팀:기획팀
- *   is:video  is:image  is:upload  is:pick  is:reject  is:fav  is:unrated
+ *   is:video  is:image  is:upload  is:ok  is:ng  is:keep  is:fav  is:unrated
+ *   cut:C003  컷:C003
  *   rating>=4  ★4  별점:5
  *   color:red  색:빨강
  *   ratio:16:9  비율:9:16
@@ -33,7 +34,9 @@ export type ParsedQuery = {
   source?: AssetSource;
   minRating?: number;
   exactRating?: number;
-  flags: ("pick" | "reject" | "none")[];
+  flags: ("pick" | "reject" | "keep" | "none")[];
+  /** 컷 번호 */
+  cuts: string[];
   colors: ColorLabel[];
   favorite?: boolean;
   unrated?: boolean;
@@ -55,6 +58,9 @@ const KEY_ALIASES: Record<string, string> = {
   만든사람: "user",
   team: "team",
   팀: "team",
+  cut: "cut",
+  컷: "cut",
+  shot: "cut",
   is: "is",
   상태: "is",
   종류: "is",
@@ -180,6 +186,7 @@ export function parseQuery(input: string, now = new Date()): ParsedQuery {
     users: [],
     teams: [],
     flags: [],
+    cuts: [],
     colors: [],
   };
   const text = input.replace(/★\s*(\d)/g, "rating>=$1");
@@ -208,6 +215,9 @@ export function parseQuery(input: string, now = new Date()): ParsedQuery {
           break;
         case "team":
           q.teams.push(value);
+          break;
+        case "cut":
+          q.cuts.push(value.toUpperCase());
           break;
         case "rating": {
           const n = Number(value.replace("+", ""));
@@ -245,8 +255,9 @@ export function parseQuery(input: string, now = new Date()): ParsedQuery {
           else if (["image", "이미지", "사진"].includes(v)) q.kind = "image";
           else if (["upload", "업로드"].includes(v)) q.source = "upload";
           else if (["generated", "생성"].includes(v)) q.source = "generated";
-          else if (["pick", "픽", "셀렉", "채택"].includes(v)) q.flags.push("pick");
-          else if (["reject", "탈락", "리젝"].includes(v)) q.flags.push("reject");
+          else if (["ok", "pick", "픽", "셀렉", "채택", "오케이"].includes(v)) q.flags.push("pick");
+          else if (["ng", "reject", "탈락", "리젝", "엔지"].includes(v)) q.flags.push("reject");
+          else if (["keep", "킵", "보류"].includes(v)) q.flags.push("keep");
           else if (["unflagged", "미분류"].includes(v)) q.flags.push("none");
           else if (["fav", "favorite", "즐겨찾기", "좋아요"].includes(v)) q.favorite = true;
           else if (["unrated", "별점없음"].includes(v)) q.unrated = true;
@@ -289,6 +300,7 @@ export function isEmptyQuery(q: ParsedQuery): boolean {
     !q.projects.length &&
     !q.users.length &&
     !q.teams.length &&
+    !q.cuts.length &&
     !q.kind &&
     !q.source &&
     q.minRating === undefined &&
@@ -312,7 +324,8 @@ export const SEARCH_HELP: { syntax: string; desc: string }[] = [
   { syntax: "@홍길동", desc: "만든 사람 (@나 = 내 것)" },
   { syntax: "model:seedream", desc: "모델 (시드림, 나노바나나, gpt, h3, 시댄스)" },
   { syntax: "project:신제품", desc: "프로젝트 이름" },
-  { syntax: "is:video · is:pick · is:fav", desc: "영상 / 셀렉 / 즐겨찾기" },
+  { syntax: "is:video · is:ok · is:ng · is:keep", desc: "영상 / OK / NG / KEEP" },
+  { syntax: "cut:C003", desc: "컷 번호" },
   { syntax: "★4  또는  rating>=4", desc: "별점 4점 이상" },
   { syntax: "color:red", desc: "컬러 라벨" },
   { syntax: "date:week · after:2026-09-01", desc: "기간" },

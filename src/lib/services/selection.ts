@@ -64,6 +64,9 @@ export async function updateAssets(u: CurrentUser, ids: string[], patch: AssetPa
   if (patch.projectId) {
     const { project } = await requireProject(u, patch.projectId, "editor");
     set.projectId = project.id;
+    // 컷은 프로젝트 안의 것이라 다른 프로젝트로 옮기면 컷에서 빠져요
+    set.cutId = null;
+    set.take = null;
   }
   if (Object.keys(set).length) {
     await db.update(assets).set(set).where(inArray(assets.id, unique));
@@ -102,6 +105,10 @@ export async function updateAssets(u: CurrentUser, ids: string[], patch: AssetPa
     } else {
       await db.delete(favorites).where(and(eq(favorites.userId, u.id), inArray(favorites.assetId, unique)));
     }
+  }
+  if (patch.projectId) {
+    const { renameAssets } = await import("@/lib/services/cuts");
+    await renameAssets(unique);
   }
   if (touchedSearch) await refreshSearchText(unique);
   if (patch.deleted !== undefined || patch.projectId) {

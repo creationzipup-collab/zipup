@@ -15,6 +15,7 @@ const Body = z.object({
   filename: z.string().min(1).max(255),
   contentType: z.string().min(1),
   projectId: z.string().uuid().nullish(),
+  cutId: z.string().uuid().nullish(),
 });
 
 export const POST = handle(async (req: Request) => {
@@ -43,6 +44,7 @@ export const POST = handle(async (req: Request) => {
     teamId: u.teamId,
     originalName: body.filename,
     existingKey: body.key,
+    cutId: body.cutId ?? null,
   });
   return {
     asset: {

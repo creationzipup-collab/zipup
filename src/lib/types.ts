@@ -4,7 +4,13 @@ export type Visibility = "private" | "team" | "company";
 export type ProjectRole = "owner" | "editor" | "viewer";
 export type AssetKind = "image" | "video";
 export type AssetSource = "generated" | "upload";
-export type Flag = "pick" | "reject";
+/** 클립 판정: pick = OK, reject = NG, keep = KEEP(보류) — 저장 값은 예전 이름을 그대로 써요 */
+export type Flag = "pick" | "reject" | "keep";
+export const FLAG_LABEL: Record<Flag, string> = { pick: "OK", reject: "NG", keep: "KEEP" };
+
+/** 컷 진행 상태 */
+export type CutStatus = "todo" | "wip" | "review" | "done";
+export const CUT_STATUS_LABEL: Record<CutStatus, string> = { todo: "대기", wip: "작업 중", review: "검토", done: "확정" };
 export type ColorLabel = "red" | "orange" | "yellow" | "green" | "blue" | "purple";
 export type ProviderId = "higgsfield" | "fal" | "mock";
 

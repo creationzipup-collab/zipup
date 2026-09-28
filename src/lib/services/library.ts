@@ -7,6 +7,7 @@ import {
   assets,
   assetTags,
   collectionItems,
+  cuts,
   favorites,
   generations,
   projects,
@@ -18,7 +19,7 @@ import { parseQuery } from "@/lib/search/query";
 import { visibleProjectsWhere } from "@/lib/services/access";
 import { assetUrls, type AssetUrls } from "@/lib/services/assets";
 import type { CurrentUser } from "@/lib/session";
-import type { ColorLabel } from "@/lib/types";
+import type { ColorLabel, Flag } from "@/lib/types";
 
 export type AssetFilters = {
   q?: string;
@@ -27,7 +28,9 @@ export type AssetFilters = {
   kind?: "image" | "video";
   models?: string[];
   minRating?: number;
-  flags?: ("pick" | "reject" | "none")[];
+  flags?: (Flag | "none")[];
+  /** 컷 id, 또는 "none" = 컷 없는 클립 */
+  cutId?: string;
   colors?: ColorLabel[];
   tags?: string[];
   mine?: boolean;
@@ -48,12 +51,15 @@ export type AssetListItem = {
   durationSec: number | null;
   sizeBytes: number | null;
   rating: number;
-  flag: "pick" | "reject" | null;
+  flag: Flag | null;
   colorLabel: ColorLabel | null;
   prompt: string;
   modelId: string | null;
   projectId: string;
   projectName: string;
+  cutId: string | null;
+  cutCode: string | null;
+  take: number | null;
   userId: string;
   userName: string;
   generationId: string | null;
@@ -81,6 +87,9 @@ export async function searchAssets(u: CurrentUser, f: AssetFilters) {
   }
   if (f.projectId) conds.push(eq(assets.projectId, f.projectId));
   else conds.push(isNull(projects.archivedAt));
+  if (f.cutId === "none") conds.push(isNull(assets.cutId));
+  else if (f.cutId) conds.push(eq(assets.cutId, f.cutId));
+  if (pq.cuts.length) conds.push(or(...pq.cuts.map((c) => sql`upper(${cuts.code}) = ${c}`)));
   if (f.collectionId) {
     conds.push(
       exists(
@@ -106,6 +115,7 @@ export async function searchAssets(u: CurrentUser, f: AssetFilters) {
     const fc: SQL[] = [];
     if (flags.includes("pick")) fc.push(eq(assets.flag, "pick"));
     if (flags.includes("reject")) fc.push(eq(assets.flag, "reject"));
+    if (flags.includes("keep")) fc.push(eq(assets.flag, "keep"));
     if (flags.includes("none")) fc.push(isNull(assets.flag));
     conds.push(or(...fc));
   }
@@ -176,12 +186,14 @@ export async function searchAssets(u: CurrentUser, f: AssetFilters) {
       a: assets,
       projectName: projects.name,
       userName: user.name,
+      cutCode: cuts.code,
       isFavorite: sql<boolean>`exists(select 1 from ${favorites} where ${favorites.userId} = ${u.id} and ${favorites.assetId} = ${assets.id})`,
     })
     .from(assets)
     .innerJoin(projects, eq(projects.id, assets.projectId))
     .innerJoin(user, eq(user.id, assets.userId))
     .leftJoin(teams, eq(teams.id, assets.teamId))
+    .leftJoin(cuts, eq(cuts.id, assets.cutId))
     .where(where)
     .orderBy(...order)
     .limit(limit + 1)
@@ -192,7 +204,7 @@ export async function searchAssets(u: CurrentUser, f: AssetFilters) {
   return { items, nextOffset: rows.length > limit ? offset + limit : null, parsed: pq };
 }
 
-type Row = { a: typeof assets.$inferSelect; projectName: string; userName: string; isFavorite: boolean };
+type Row = { a: typeof assets.$inferSelect; projectName: string; userName: string; isFavorite: boolean; cutCode?: string | null };
 
 export async function toListItems(rows: Row[]): Promise<AssetListItem[]> {
   if (!rows.length) return [];
@@ -203,7 +215,7 @@ export async function toListItems(rows: Row[]): Promise<AssetListItem[]> {
     .innerJoin(tags, eq(tags.id, assetTags.tagId))
     .where(inArray(assetTags.assetId, ids));
   return Promise.all(
-    rows.map(async ({ a, projectName, userName, isFavorite }) => ({
+    rows.map(async ({ a, projectName, userName, isFavorite, cutCode }) => ({
       id: a.id,
       kind: a.kind,
       source: a.source,
@@ -219,6 +231,9 @@ export async function toListItems(rows: Row[]): Promise<AssetListItem[]> {
       modelId: a.modelId,
       projectId: a.projectId,
       projectName,
+      cutId: a.cutId,
+      cutCode: cutCode ?? null,
+      take: a.take,
       userId: a.userId,
       userName,
       generationId: a.generationId,
@@ -237,11 +252,13 @@ export async function assetDetail(u: CurrentUser, id: string) {
       a: assets,
       projectName: projects.name,
       userName: user.name,
+      cutCode: cuts.code,
       isFavorite: sql<boolean>`exists(select 1 from ${favorites} where ${favorites.userId} = ${u.id} and ${favorites.assetId} = ${assets.id})`,
     })
     .from(assets)
     .innerJoin(projects, eq(projects.id, assets.projectId))
     .innerJoin(user, eq(user.id, assets.userId))
+    .leftJoin(cuts, eq(cuts.id, assets.cutId))
     .where(and(eq(assets.id, id), visibleProjectsWhere(u)))
     .limit(1);
   if (!rows[0]) return null;

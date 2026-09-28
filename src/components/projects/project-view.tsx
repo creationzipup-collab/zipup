@@ -25,6 +25,7 @@ import { toast } from "sonner";
 
 import { AssetBrowser } from "@/components/assets/asset-browser";
 import { MediaThumb } from "@/components/assets/media";
+import { CutBoardView } from "@/components/cuts/cut-board";
 import { MembersDialog, ProjectFormDialog } from "@/components/projects/project-dialogs";
 import { useUploader } from "@/components/studio/reference-slots";
 import { Button } from "@/components/ui/button";
@@ -53,6 +54,7 @@ type Overview = {
   teamName: string | null;
   ownerName: string;
   stats: { total: number; images: number; videos: number; picks: number };
+  cutCount: number;
   collections: { id: string; name: string; description: string | null; updatedAt: string; count: number }[];
   canvases: { id: string; name: string; updatedAt: string }[];
 };
@@ -64,12 +66,14 @@ export function ProjectView({
   cover,
   initialTab,
   initialCollection,
+  initialCut,
   canChooseTeam,
 }: {
   data: Overview;
   cover: { kind: "image" | "video"; urls: { thumb: string; src: string; download: string } } | null;
   initialTab: string;
   initialCollection: string | null;
+  initialCut: string | null;
   canChooseTeam: boolean;
 }) {
   const router = useRouter();
@@ -79,6 +83,16 @@ export function ProjectView({
   const canManage = data.level === "owner";
   const [tab, setTab] = React.useState(initialTab);
   const [collection, setCollection] = React.useState<string | null>(initialCollection);
+  const [cut, setCut] = React.useState<string | null>(initialCut);
+  // 컷을 열고 닫을 때 주소에도 남겨서 공유·뒤로 가기가 되게
+  function openCut(id: string | null) {
+    setCut(id);
+    const params = new URLSearchParams(window.location.search);
+    params.set("tab", "cuts");
+    if (id) params.set("cut", id);
+    else params.delete("cut");
+    window.history.replaceState(null, "", `?${params}`);
+  }
   const [editOpen, setEditOpen] = React.useState(false);
   const [membersOpen, setMembersOpen] = React.useState(false);
   const fileRef = React.useRef<HTMLInputElement>(null);
@@ -145,7 +159,7 @@ export function ProjectView({
                 <span>전체 {data.stats.total}</span>
                 <span>이미지 {data.stats.images}</span>
                 <span>영상 {data.stats.videos}</span>
-                <span className="text-success">픽 {data.stats.picks}</span>
+                <span className="text-success">OK {data.stats.picks}</span>
                 <span className="font-sans">
                   최근 활동 <TimeAgo date={p.lastActivityAt} />
                 </span>
@@ -246,10 +260,15 @@ export function ProjectView({
       <div className="mx-auto w-full max-w-[1800px] px-4 py-5 sm:px-8">
         <Tabs value={tab} onValueChange={(t) => { setTab(t); setCollection(null); }}>
           <TabsList className="mb-5">
-            <TabsTrigger value="assets"><ImagePlus /> 에셋</TabsTrigger>
+            <TabsTrigger value="cuts"><Clapperboard /> 컷 <span className="font-mono text-[11px] text-fg-4">{data.cutCount}</span></TabsTrigger>
+            <TabsTrigger value="assets"><ImagePlus /> 클립 전체</TabsTrigger>
             <TabsTrigger value="collections"><Layers /> 컬렉션 <span className="font-mono text-[11px] text-fg-4">{data.collections.length}</span></TabsTrigger>
             <TabsTrigger value="canvases"><Workflow /> 캔버스 <span className="font-mono text-[11px] text-fg-4">{data.canvases.length}</span></TabsTrigger>
           </TabsList>
+
+          <TabsContent value="cuts">
+            <CutBoardView projectId={p.id} projectName={p.name} canEdit={canEdit} openCut={cut} onOpenCut={openCut} />
+          </TabsContent>
 
           <TabsContent value="assets">
             <AssetBrowser projectId={p.id} canEdit={canEdit} hideScope />

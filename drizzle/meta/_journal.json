@@ -29,6 +29,13 @@
       "when": 1790577681188,
       "tag": "0003_slim_venus",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790583126290,
+      "tag": "0004_cuts_takes_sharing",
+      "breakpoints": true
     }
   ]
 }

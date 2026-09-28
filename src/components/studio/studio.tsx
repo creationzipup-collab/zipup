@@ -1,7 +1,7 @@
 "use client";
 
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { BookText, FolderKanban, Languages, Megaphone, Minus, MonitorUp, Plus, Sparkles, Wand2 } from "lucide-react";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { BookText, Clapperboard, FolderKanban, Languages, Megaphone, Minus, MonitorUp, Plus, Sparkles, Wand2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 import { toast } from "sonner";
@@ -65,7 +65,7 @@ const INSPIRATION: Record<"image" | "video", string[]> = {
   ],
 };
 
-type Stored = { modelId?: string; paramsByModel?: Record<string, Record<string, unknown>>; count?: number; projectId?: string };
+type Stored = { modelId?: string; paramsByModel?: Record<string, Record<string, unknown>>; count?: number; projectId?: string; cutByProject?: Record<string, string> };
 
 function loadStored(kind: string): Stored {
   try {
@@ -100,7 +100,11 @@ export function Studio({
   const [prompt, setPrompt] = React.useState(prefill.prompt ?? "");
   const [inputs, setInputs] = React.useState<StudioInputs>(() => ({ ...EMPTY_INPUTS, ...(prefill.inputs ?? {}) }));
   const [count, setCount] = React.useState(1);
-  const [projectId, setProjectId] = React.useState<string>(prefill.projectId ?? projects[0]?.id);
+  const [projectId, setProjectIdRaw] = React.useState<string>(prefill.projectId ?? projects[0]?.id);
+  // 컷: 프로젝트마다 마지막으로 고른 컷을 기억 ("none" = 컷 없이)
+  const [cutByProject, setCutByProject] = React.useState<Record<string, string>>(() => (prefill.cutId && prefill.projectId ? { [prefill.projectId]: prefill.cutId } : {}));
+  const cutChoice = cutByProject[projectId] ?? "none";
+  const setProjectId = setProjectIdRaw;
   const [submitting, setSubmitting] = React.useState(false);
   const [lightbox, setLightbox] = React.useState<{ items: LightboxItem[]; index: number } | null>(null);
   const [finalizeId, setFinalizeId] = React.useState<string | null>(null);
@@ -135,6 +139,7 @@ export function Studio({
     if (s.paramsByModel) setParamsByModel((p) => ({ ...s.paramsByModel, ...p }));
     if (s.count) setCount(s.count);
     if (!prefill.projectId && s.projectId && projects.some((p) => p.id === s.projectId)) setProjectId(s.projectId);
+    if (s.cutByProject) setCutByProject((c) => ({ ...s.cutByProject, ...c }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -149,9 +154,29 @@ export function Studio({
   React.useEffect(() => {
     if (!hydrated.current) return;
     try {
-      localStorage.setItem(`zipup:studio:${kind}`, JSON.stringify({ modelId, paramsByModel, count, projectId }));
+      localStorage.setItem(`zipup:studio:${kind}`, JSON.stringify({ modelId, paramsByModel, count, projectId, cutByProject }));
     } catch {}
-  }, [kind, modelId, paramsByModel, count, projectId]);
+  }, [kind, modelId, paramsByModel, count, projectId, cutByProject]);
+
+  // 이 프로젝트의 컷
+  const { data: cutOptions = [] } = useQuery({
+    queryKey: ["cut-options", projectId],
+    queryFn: () => fetchJson<{ items: { id: string; code: string; title: string | null }[] }>(`/api/projects/${projectId}/cuts?lite=1`).then((r) => r.items),
+    enabled: !!projectId,
+    staleTime: 30_000,
+  });
+  const cutId = cutChoice !== "none" && cutOptions.some((c) => c.id === cutChoice) ? cutChoice : null;
+  const cutCode = cutOptions.find((c) => c.id === cutId)?.code ?? null;
+  async function addCut() {
+    try {
+      const r = await fetchJson<{ items: { id: string; code: string }[] }>(`/api/projects/${projectId}/cuts`, { method: "POST", body: JSON.stringify({ count: 1 }) });
+      await qc.invalidateQueries({ queryKey: ["cut-options", projectId] });
+      setCutByProject((m) => ({ ...m, [projectId]: r.items[0].id }));
+      toast.success(`${r.items[0].code}를 만들고 골랐어요.`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
 
   // 모델·작업 종류가 바뀌어 슬롯이 사라지면 입력 정리
   const slotKey = `${model.id}:${String(params.task ?? "")}`;
@@ -256,6 +281,7 @@ export function Studio({
         },
         count: effectiveCount,
         projectId,
+        cutId,
       });
       push(res.generations);
       dual.post({ type: "submitted", kind, generations: res.generations });
@@ -487,6 +513,7 @@ export function Studio({
       ? `레퍼런스 ${inputs.images.length + inputs.videos.length + (inputs.startFrame ? 1 : 0) + (inputs.endFrame ? 1 : 0)}`
       : null,
     projects.find((p) => p.id === projectId)?.name,
+    cutCode,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -676,6 +703,28 @@ export function Studio({
                     options={projects.map((p) => ({ value: p.id, label: p.isPersonal ? `🔒 ${p.name}` : p.name }))}
                     className="w-full"
                   />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-fg-2">
+                    <Clapperboard className="size-3.5" /> 컷
+                    <span className="font-normal text-fg-4">— 고르면 결과에 테이크 번호가 붙어요</span>
+                  </span>
+                  <div className="flex gap-2">
+                    <Select
+                      value={cutId ?? "none"}
+                      onValueChange={(v) => setCutByProject((m) => ({ ...m, [projectId]: v }))}
+                      options={[
+                        { value: "none", label: "컷 없이 (프로젝트에 바로)" },
+                        ...cutOptions.map((c) => ({ value: c.id, label: c.title ? `${c.code} · ${c.title}` : c.code })),
+                      ]}
+                      className="min-w-0 flex-1"
+                    />
+                    <Tip content="다음 번호로 컷 만들기">
+                      <Button variant="secondary" size="icon" onClick={() => void addCut()} aria-label="새 컷">
+                        <Plus />
+                      </Button>
+                    </Tip>
+                  </div>
                 </div>
                 {model.priceNote && <p className="text-[11px] leading-relaxed text-fg-4">{model.priceNote}</p>}
               </SettingsCard>
