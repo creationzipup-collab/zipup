@@ -1,0 +1,122 @@
+/**
+ * 검색어 확장용 한·영 동의어 사전 (규칙 기반)
+ * 프롬프트는 영어로 쓰고 검색은 한국어로 하는 경우가 많아, 흔한 시각 어휘를 서로 연결합니다.
+ */
+const GROUPS: string[][] = [
+  ["사람", "인물", "person", "people", "human", "portrait", "초상"],
+  ["여자", "여성", "woman", "women", "girl", "female", "소녀"],
+  ["남자", "남성", "man", "men", "boy", "male", "소년"],
+  ["아이", "어린이", "child", "kid", "baby", "아기"],
+  ["얼굴", "face", "facial", "클로즈업", "closeup", "close-up"],
+  ["캐릭터", "character", "mascot", "마스코트"],
+  ["고양이", "cat", "kitten"],
+  ["강아지", "dog", "puppy"],
+  ["bird", "birds", "조류"],
+  ["horse", "horses"],
+  ["물고기", "fish"],
+  ["꽃", "flower", "flowers", "floral", "blossom"],
+  ["나무", "tree", "trees"],
+  ["숲", "forest", "woods", "jungle", "정글"],
+  ["mountain", "mountains", "산맥"],
+  ["바다", "sea", "ocean", "해변", "beach", "coast", "shore"],
+  ["river", "강가", "강물"],
+  ["호수", "lake"],
+  ["하늘", "sky"],
+  ["구름", "cloud", "clouds"],
+  ["rain", "rainy", "빗속", "빗방울"],
+  ["snow", "snowy", "눈송이", "설경", "winter", "겨울"],
+  ["여름", "summer"],
+  ["봄", "spring"],
+  ["가을", "autumn", "fall"],
+  ["밤", "night", "야경", "nighttime", "midnight"],
+  ["day", "daylight", "daytime", "대낮"],
+  ["노을", "석양", "sunset", "dusk"],
+  ["일출", "sunrise", "dawn"],
+  ["도시", "city", "urban", "downtown", "metropolis"],
+  ["거리", "street", "alley", "골목"],
+  ["건물", "building", "architecture", "건축"],
+  ["house", "home", "주택"],
+  ["room", "interior", "실내", "인테리어"],
+  ["사무실", "office"],
+  ["카페", "cafe", "coffee", "커피"],
+  ["음식", "food", "dish", "meal", "요리"],
+  ["음료", "drink", "beverage"],
+  ["자동차", "car", "vehicle", "automobile"],
+  ["오토바이", "motorcycle", "bike"],
+  ["비행기", "airplane", "plane", "aircraft"],
+  ["우주", "space", "galaxy", "cosmic", "universe", "은하"],
+  ["로봇", "robot", "android", "cyborg"],
+  ["사이버펑크", "cyberpunk", "neon", "네온"],
+  ["판타지", "fantasy", "magic", "마법"],
+  ["공상과학", "sf", "sci-fi", "scifi", "futuristic", "미래"],
+  ["빈티지", "vintage", "retro", "레트로"],
+  ["애니", "애니메이션", "anime", "cartoon", "만화", "illustration", "일러스트"],
+  ["실사", "photo", "photograph", "photography", "realistic"],
+  ["3d", "쓰리디", "render", "cgi"],
+  ["흑백", "monochrome", "black and white", "b&w"],
+  ["빨간", "빨강", "레드", "red"],
+  ["주황", "오렌지", "orange"],
+  ["노란", "노랑", "옐로", "yellow"],
+  ["초록", "녹색", "그린", "green"],
+  ["파란", "파랑", "블루", "blue"],
+  ["보라", "퍼플", "purple", "violet"],
+  ["분홍", "핑크", "pink"],
+  ["검은", "검정", "블랙", "black", "dark"],
+  ["하얀", "흰", "하양", "화이트", "white"],
+  ["금색", "골드", "gold", "golden"],
+  ["은색", "실버", "silver", "chrome", "크롬"],
+  ["옷", "의상", "패션", "fashion", "outfit", "clothing", "costume"],
+  ["드레스", "dress", "gown"],
+  ["정장", "suit"],
+  ["모자", "hat", "cap"],
+  ["안경", "glasses", "sunglasses"],
+  ["제품", "product", "packshot", "패키지", "package", "packaging"],
+  ["광고", "ad", "advertisement", "campaign", "캠페인", "commercial"],
+  ["포스터", "poster"],
+  ["로고", "logo"],
+  ["배너", "banner"],
+  ["썸네일", "thumbnail"],
+  ["텍스트", "글자", "text", "typography", "타이포"],
+  ["배경", "background", "backdrop"],
+  ["풍경", "landscape", "scenery", "scene"],
+  ["춤", "댄스", "dance", "dancing"],
+  ["달리기", "run", "running"],
+  ["걷기", "walk", "walking"],
+  ["웃음", "웃는", "smile", "smiling", "laugh"],
+  ["울음", "우는", "cry", "crying", "tears"],
+  ["노래", "sing", "singing", "가수", "singer"],
+  ["아이돌", "idol", "kpop", "k-pop", "케이팝"],
+  ["무대", "stage", "concert", "콘서트", "공연"],
+  ["뮤직비디오", "뮤비", "mv", "music video"],
+  ["영화", "cinematic", "film", "movie", "시네마틱"],
+  ["조명", "lighting", "light"],
+  ["그림자", "shadow"],
+  ["fire", "flame", "화염", "불꽃"],
+  ["water", "물결", "수면"],
+  ["연기", "smoke"],
+  ["폭발", "explosion"],
+  ["드론", "drone", "aerial", "항공"],
+  ["슬로우모션", "slow motion", "slowmo"],
+  ["타임랩스", "timelapse", "time-lapse"],
+  ["카메라", "camera"],
+  ["줌", "zoom"],
+  ["pan", "panning", "패닝"],
+  ["트래킹", "tracking", "dolly", "달리"],
+];
+
+const INDEX = new Map<string, string[]>();
+for (const g of GROUPS) {
+  const norm = g.map((w) => w.toLowerCase());
+  for (const w of norm) {
+    const prev = INDEX.get(w) ?? [];
+    INDEX.set(w, Array.from(new Set([...prev, ...norm])));
+  }
+}
+
+/** 검색어 → 동의어 포함 목록 (최대 8개) */
+export function expandTerm(term: string): string[] {
+  const t = term.toLowerCase();
+  const hit = INDEX.get(t);
+  if (!hit) return [t];
+  return [t, ...hit.filter((w) => w !== t)].slice(0, 8);
+}
