@@ -186,7 +186,7 @@ export function CutBoardView({
 function Stat({ label, value, sub, tone }: { label: string; value: number; sub?: string; tone?: string }) {
   return (
     <div className="flex flex-col gap-1">
-      <dt className="font-mono text-[10px] uppercase tracking-[0.2em] text-fg-4">{label}</dt>
+      <dt className="text-[11.5px] text-fg-3">{label}</dt>
       <dd className={cn("font-display text-[30px] font-light leading-none tracking-[-0.02em]", tone)}>
         <RollingNumber value={value} />
       </dd>
