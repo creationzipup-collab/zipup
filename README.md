@@ -140,6 +140,8 @@ Higgsfield·fal 결과 URL은 며칠 뒤 만료되므로, 완성된 파일은 �
 - **fal.ai**: https://fal.ai/dashboard/keys → `FAL_KEY` (잔액 충전 필요)
 
 ### Vercel 설정 참고
+- **자동 배포**: 운영 브랜치에 푸시하면 GitHub Actions(`.github/workflows/deploy.yml`)가 Vercel로 배포해요. Vercel의 GitHub 연동 없이 토큰으로 배포하므로 GitHub·Vercel 계정이 달라도 돼요.
+  저장소 **Settings → Secrets and variables → Actions**에 `VERCEL_TOKEN`(Vercel → Account Settings → Tokens에서 발급)만 넣으면 돼요. 없으면 배포 단계를 건너뛰어요.
 - `APP_URL`은 비워 두면 Vercel 운영 주소(`https://<프로젝트>.vercel.app`)를 자동으로 써요. 회사 도메인을 연결했다면 그 주소를 넣으세요. 공급자 **웹훅**이 이 주소로 결과를 알려줘요.
 - `vercel.json`에 서울 리전(`icn1`)과 **복구용 Cron**(`/api/cron/tick`, 하루 1번 · 새벽 3시)이 설정돼 있어요. 대기열 제출·상태 확인·결과 저장 재시도는 평소에 **웹훅과 누군가 열어 둔 화면의 폴링**이 처리하고, Cron은 아무도 접속하지 않을 때의 안전망이에요.
   - 이 설정은 Hobby·Pro 어느 플랜에서도 배포돼요. 사내 서비스는 Vercel 약관상 **Pro 플랜**이 맞고, Pro라면 `schedule`을 `* * * * *`(매분)로 바꿔 복구를 더 촘촘하게 할 수 있어요.

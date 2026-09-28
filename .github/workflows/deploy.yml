@@ -1,0 +1,32 @@
+# 운영 브랜치에 푸시하면 Vercel 운영 사이트로 배포해요.
+# Vercel의 GitHub 연동 대신 토큰으로 배포하므로, GitHub와 Vercel 계정이 달라도 동작해요.
+# 필요한 것: 저장소 Settings → Secrets and variables → Actions → VERCEL_TOKEN (Vercel → Account Settings → Tokens)
+name: Deploy to Vercel
+
+on:
+  push:
+    branches: [claude/internal-ai-platform-site-s2knxn]
+  workflow_dispatch:
+
+concurrency:
+  group: vercel-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: team_APtxXd11UxEZSbS9Ly7WC1B4
+      VERCEL_PROJECT_ID: prj_NO0wU67DZ4vvzZCQDcRSCAK9XBmB
+      VERCEL_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: VERCEL_TOKEN 확인
+        if: env.VERCEL_TOKEN == ''
+        run: echo "::warning::VERCEL_TOKEN secret이 없어 배포를 건너뛰어요."
+      - uses: actions/checkout@v4
+        if: env.VERCEL_TOKEN != ''
+      - name: Vercel 운영 배포 (빌드는 Vercel에서, DB 마이그레이션 포함)
+        if: env.VERCEL_TOKEN != ''
+        run: npx --yes vercel@60 deploy --prod --yes --token "$VERCEL_TOKEN"
