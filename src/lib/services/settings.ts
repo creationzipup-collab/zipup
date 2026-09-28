@@ -17,6 +17,8 @@ export type AppSettings = {
   signupDomains: string[];
   /** 예산 경고 기준(%) */
   budgetWarnPercent: number;
+  /** 번역·단어 추천 LLM 모델 (빈 값 = 기본) */
+  llmModel: string;
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -26,6 +28,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   allowSignup: true,
   signupDomains: [],
   budgetWarnPercent: 80,
+  llmModel: "",
 };
 
 let cache: { at: number; value: AppSettings } | null = null;

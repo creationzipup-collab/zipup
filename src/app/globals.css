@@ -123,6 +123,18 @@
   --animate-pulse-dot: pulse-dot 1.6s ease-in-out infinite;
 }
 
+@property --prompt-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes prompt-spin {
+  to {
+    --prompt-angle: 360deg;
+  }
+}
+
 @keyframes shimmer {
   0% {
     background-position: -200% 0;
@@ -305,6 +317,23 @@
     mask-composite: exclude;
     z-index: -1;
     opacity: 0.9;
+  }
+
+  /* 프롬프트 편집기: 평소엔 얇은 테두리, 포커스되면 회전하는 그라디언트 테두리 */
+  .prompt-card {
+    background: var(--line-2);
+    box-shadow: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 24px 60px -32px rgb(0 0 0 / 0.55);
+    transition: box-shadow 0.4s ease;
+  }
+  .prompt-card:focus-within {
+    background: conic-gradient(from var(--prompt-angle), var(--accent) 0%, #ffb36b 12%, var(--line-3) 30%, var(--line-2) 50%, #7c8cff 72%, var(--accent) 100%);
+    animation: prompt-spin 6s linear infinite;
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 10%, transparent), 0 30px 80px -30px color-mix(in oklab, var(--accent) 35%, transparent);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .prompt-card:focus-within {
+      animation: none;
+    }
   }
 
   .checker {

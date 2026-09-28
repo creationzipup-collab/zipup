@@ -19,6 +19,13 @@ export type SettingsValue = {
   allowSignup: boolean;
   signupDomains: string[];
   budgetWarnPercent: number;
+  llmModel: string;
+};
+
+type LlmInfo = {
+  provider: "openai" | "fal" | "mock" | null;
+  presets: { id: string; label: string; price: string; note: string }[];
+  defaultModel: string;
 };
 
 const DEFAULT_TEMPLATE = "{project}_{model}_{date}_{seq}";
@@ -60,7 +67,7 @@ const SAMPLES = [
   },
 ];
 
-export function SettingsAdmin({ initial }: { initial: SettingsValue }) {
+export function SettingsAdmin({ initial, llm }: { initial: SettingsValue; llm: LlmInfo }) {
   const router = useRouter();
   const [v, setV] = React.useState<SettingsValue>(initial);
   const [saved, setSaved] = React.useState<SettingsValue>(initial);
@@ -226,6 +233,48 @@ export function SettingsAdmin({ initial }: { initial: SettingsValue }) {
           <Slider value={[v.budgetWarnPercent]} min={50} max={100} step={5} onValueChange={([x]) => set("budgetWarnPercent", x)} className="max-w-sm" />
           <span className="w-14 text-right font-mono text-[15px] font-semibold tabular-nums">{v.budgetWarnPercent}%</span>
         </div>
+      </Section>
+
+      {/* ------------------------------ LLM ------------------------------- */}
+      <Section
+        title="번역·단어 추천 AI"
+        description="스튜디오의 한국어 대조 번역, 단어 추천, 한→영/중 변환에 쓰는 언어 모델이에요. 호출 1회에 보통 $0.001 미만이에요."
+      >
+        <div className="flex items-center gap-2 text-[12.5px]">
+          <span className="text-fg-3">연결 상태</span>
+          {llm.provider === "fal" ? (
+            <span className="rounded-md bg-success/12 px-1.5 py-0.5 text-[11px] text-success">● fal.ai (OpenRouter)</span>
+          ) : llm.provider === "openai" ? (
+            <span className="rounded-md bg-success/12 px-1.5 py-0.5 text-[11px] text-success">● 직접 연결 (LLM_BASE_URL)</span>
+          ) : llm.provider === "mock" ? (
+            <span className="rounded-md bg-warning/12 px-1.5 py-0.5 text-[11px] text-warning">● 모의 (키 없음·개발용)</span>
+          ) : (
+            <span className="rounded-md bg-danger/12 px-1.5 py-0.5 text-[11px] text-danger">● 꺼짐</span>
+          )}
+        </div>
+        {llm.provider !== "openai" ? (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {llm.presets.map((p) => {
+              const active = (v.llmModel || llm.defaultModel) === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => set("llmModel", p.id === llm.defaultModel ? "" : p.id)}
+                  className={cn("flex flex-col gap-0.5 rounded-xl border p-3 text-left transition", active ? "border-fg bg-panel-2" : "border-line-2 hover:border-line-3")}
+                >
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="text-[13px] font-medium">{p.label}</span>
+                    <span className="font-mono text-[11px] text-fg-3">{p.price}</span>
+                  </span>
+                  <span className="text-[11.5px] text-fg-4">{p.note}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-[12px] text-fg-4">LLM_BASE_URL로 직접 연결 중이에요. 모델은 LLM_MODEL 환경 변수로 정해요.</p>
+        )}
       </Section>
 
       {/* ---------------------------- 동시 실행 ----------------------------- */}

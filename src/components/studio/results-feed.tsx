@@ -65,6 +65,7 @@ export function ResultsFeed({
   onReuse,
   onFinalize,
   onUseAsReference,
+  view = "batches",
 }: {
   kind: "image" | "video";
   generations: GenerationDTO[];
@@ -76,6 +77,8 @@ export function ResultsFeed({
   onReuse: (g: GenerationDTO) => void;
   onFinalize: (generationId: string) => void;
   onUseAsReference: (item: RefAsset) => void;
+  /** batches: 요청별 묶음 · gallery: 큰 화면용 모자이크 */
+  view?: "batches" | "gallery";
 }) {
   const batches = React.useMemo(() => groupBatches(generations), [generations]);
   const allOutputs = React.useMemo(() => generations.flatMap((g) => g.outputs.map(toLightbox)), [generations]);
@@ -116,6 +119,50 @@ export function ResultsFeed({
           title={kind === "image" ? "첫 이미지를 만들어 보세요" : "첫 영상을 만들어 보세요"}
           description="왼쪽에서 모델과 프롬프트를 정하고 생성하기를 누르면 결과가 여기에 쌓여요. 이미지를 드래그하거나 붙여넣으면 레퍼런스로 들어가요."
         />
+      </div>
+    );
+  }
+
+  if (view === "gallery") {
+    type GalleryTile = { g: GenerationDTO; out: GenerationDTO["outputs"][number] | null };
+    const tiles: GalleryTile[] = generations.flatMap((g): GalleryTile[] =>
+      g.outputs.length ? g.outputs.map((out) => ({ g, out })) : isActive(g) || g.status !== "completed" ? [{ g, out: null }] : [],
+    );
+    return (
+      <div className="flex flex-col gap-6">
+        <div className="columns-2 gap-3 md:columns-3 xl:columns-4 2xl:columns-5 [column-fill:_balance]">
+          {tiles.map(({ g, out }, i) => (
+            <div key={out?.id ?? `${g.id}-${i}`} className="mb-3 break-inside-avoid animate-fade-up">
+              {out ? (
+                <div className="group/gal relative">
+                  <OutputTile
+                    g={g}
+                    out={out}
+                    onOpen={() => {
+                      const idx = allOutputs.findIndex((o) => o.id === out.id);
+                      onOpen(allOutputs, Math.max(0, idx));
+                    }}
+                    onFinalize={() => onFinalize(g.id)}
+                    onUseAsReference={() => onUseAsReference({ id: out.id, kind: out.kind, filename: out.filename, width: out.width, height: out.height, durationSec: out.durationSec, urls: out.urls })}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => onReuse(g)}
+                    className="mt-1.5 line-clamp-2 w-full px-0.5 text-left text-[11.5px] leading-snug text-fg-4 transition hover:text-fg-2"
+                    title="클릭하면 이 프롬프트와 설정을 불러와요"
+                  >
+                    {g.prompt || "(프롬프트 없음)"}
+                  </button>
+                </div>
+              ) : (
+                <PendingTile g={g} ratio={typeof g.params.aspectRatio === "string" && g.params.aspectRatio.includes(":") ? g.params.aspectRatio : "1:1"} />
+              )}
+            </div>
+          ))}
+        </div>
+        <div ref={sentinel} className="flex justify-center py-6">
+          {loadingMore && <Loader2 className="size-5 animate-spin text-fg-3" />}
+        </div>
       </div>
     );
   }

@@ -61,6 +61,18 @@ export const env = {
     clientId: str("GOOGLE_CLIENT_ID"),
     clientSecret: str("GOOGLE_CLIENT_SECRET"),
   },
+  /**
+   * 번역·단어 추천용 LLM
+   * - LLM_BASE_URL + LLM_API_KEY: OpenAI 호환 API (Google Gemini 무료 키, OpenRouter, Groq 등)
+   * - 없으면 FAL_KEY로 fal.ai의 OpenRouter 라우터 사용
+   */
+  llm: {
+    baseUrl: str("LLM_BASE_URL")?.replace(/\/$/, ""),
+    apiKey: str("LLM_API_KEY"),
+    model: str("LLM_MODEL"),
+    /** "off"면 LLM 기능 끔, "mock"이면 모의 응답(개발·시연용) */
+    mode: (str("LLM_PROVIDER") ?? "auto") as "auto" | "openai" | "fal" | "mock" | "off",
+  },
 };
 
 export function requireAuthSecret(): string {

@@ -14,6 +14,8 @@ export type ModelStatus = {
   priceOverrides: Record<string, number>;
   /** 관리자 공지 (예: "이번 주 프로모션 단가") */
   notes?: string | null;
+  /** 드래프트 요청이 갈 공급자 (드래프트 지원 모델만) */
+  draftProvider?: "higgsfield" | "fal" | "mock" | null;
 };
 
 export function ModelSwatch({ model, className }: { model: Pick<ModelDef, "gradient" | "vendor">; className?: string }) {

@@ -8,6 +8,7 @@ import { MODELS } from "@/lib/models/registry";
 import { resolveProvider } from "@/lib/providers";
 import { atLeast, computeAccess, ensurePersonalProject, visibleProjectsWhere } from "@/lib/services/access";
 import { assetDetail, toListItems } from "@/lib/services/library";
+import { canAddVersion } from "@/lib/services/prompt-docs";
 import { getModelConfigs } from "@/lib/services/settings";
 import type { CurrentUser } from "@/lib/session";
 
@@ -74,6 +75,8 @@ export type StudioPrefill = {
   count?: number;
   projectId?: string;
   inputs?: { images: RefItem[]; startFrame?: RefItem; endFrame?: RefItem; videos: RefItem[] };
+  /** 프롬프트 라이브러리에서 열었을 때: 저장하면 이 프롬프트의 새 버전이 돼요 */
+  doc?: { id: string; title: string; version: number; visibility: "private" | "team" | "company"; canAddVersion: boolean; baseText: string };
 };
 
 async function refItems(u: CurrentUser, ids: string[]): Promise<RefItem[]> {
@@ -135,6 +138,14 @@ export async function studioPrefill(
       );
     if (p) {
       out.prompt = p.prompt;
+      out.doc = {
+        id: p.id,
+        title: p.title,
+        version: p.latestVersion,
+        visibility: p.visibility,
+        canAddVersion: canAddVersion(u, p),
+        baseText: p.prompt,
+      };
       if (p.modelId && MODELS.some((m) => m.id === p.modelId && m.kind === kind)) {
         out.modelId = p.modelId;
         if (p.params) out.params = p.params;

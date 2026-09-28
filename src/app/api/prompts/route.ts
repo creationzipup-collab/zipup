@@ -4,6 +4,7 @@ import { z } from "zod";
 import { handle, readJson } from "@/lib/api";
 import { db } from "@/lib/db";
 import { promptPresets, user } from "@/lib/db/schema";
+import { createPresetWithVersion } from "@/lib/services/prompt-docs";
 import { apiUser } from "@/lib/session";
 
 export const GET = handle(async (req: Request) => {
@@ -37,20 +38,19 @@ export const GET = handle(async (req: Request) => {
 
 const Body = z.object({
   title: z.string().trim().min(1).max(80),
-  prompt: z.string().trim().min(1).max(5000),
+  prompt: z.string().trim().min(1).max(7000),
   kind: z.enum(["image", "video", "any"]).default("any"),
   modelId: z.string().max(60).nullish(),
   params: z.record(z.string(), z.unknown()).nullish(),
   tags: z.array(z.string().trim().min(1).max(30)).max(10).default([]),
   visibility: z.enum(["private", "team", "company"]).default("team"),
+  note: z.string().trim().max(200).nullish(),
 });
 
+/** 새 프롬프트 (v1 버전과 함께 저장) */
 export const POST = handle(async (req: Request) => {
   const u = await apiUser();
   const b = Body.parse(await readJson(req));
-  const [row] = await db
-    .insert(promptPresets)
-    .values({ ...b, modelId: b.modelId ?? null, params: b.params ?? null, userId: u.id, teamId: u.teamId })
-    .returning();
-  return { item: row };
+  const { preset, version } = await createPresetWithVersion(u, b);
+  return { item: preset, version: version.version };
 });

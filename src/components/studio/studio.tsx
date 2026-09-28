@@ -1,22 +1,25 @@
 "use client";
 
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkPlus, BookText, FolderKanban, Megaphone, Minus, Plus, Sparkles, Wand2 } from "lucide-react";
+import { BookText, FolderKanban, Languages, Megaphone, Minus, MonitorUp, Plus, Sparkles, Wand2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { Lightbox, type LightboxItem } from "@/components/assets/lightbox";
-import { PromptLibraryDialog, SavePromptDialog } from "@/components/prompts/prompt-dialogs";
+import { BilingualPanel } from "@/components/prompt-desk/bilingual-panel";
+import { type Baseline, DeskTabs, type DeskTab, DiffPanel, DocChip, SettingsCard } from "@/components/prompt-desk/desk-panels";
+import { PromptEditor } from "@/components/prompt-desk/prompt-editor";
+import { type DeskDoc, SaveVersionDialog, VersionList } from "@/components/prompt-desk/versions";
+import { PromptLibraryDialog } from "@/components/prompts/prompt-dialogs";
 import { useShell } from "@/components/shell/app-shell";
 import { ModelPicker, ProviderTag, type ModelStatus } from "@/components/studio/model-picker";
 import { ParamControls } from "@/components/studio/param-controls";
-import { EMPTY_INPUTS, ReferenceSlots, type StudioInputs } from "@/components/studio/reference-slots";
+import { EMPTY_INPUTS, type RefAsset, ReferenceSlots, type StudioInputs } from "@/components/studio/reference-slots";
 import { FinalizeDialog, ResultsFeed } from "@/components/studio/results-feed";
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/controls";
+import { Segmented, Select } from "@/components/ui/controls";
 import { Tip } from "@/components/ui/menu";
-import { Kbd } from "@/components/ui/misc";
 import {
   createGenerationRequest,
   isActive,
@@ -24,24 +27,29 @@ import {
   usePushGenerations,
   type GenerationDTO,
 } from "@/lib/client/generations";
+import { convertPromptRequest, type PromptDocDTO, type Suggestion, usePrimeTranslation, useTranslation } from "@/lib/client/prompt-tools";
+import { useDualMonitor } from "@/lib/client/studio-channel";
+import { useResultsView } from "@/lib/client/use-results-view";
 import { defaultParams, IMAGE_MODELS, sanitizeParams, VIDEO_MODELS } from "@/lib/models/registry";
 import type { ModelDef } from "@/lib/models/types";
+import { replaceSegment } from "@/lib/prompt/align";
+import { diffStats, diffWords } from "@/lib/prompt/diff";
 import type { EditableProject, StudioPrefill } from "@/lib/services/studio";
 import { cn, fetchJson, usd } from "@/lib/utils";
 
 const INSPIRATION: Record<"image" | "video", string[]> = {
   image: [
-    "새벽 안개가 낀 서울 골목, 네온 간판이 젖은 아스팔트에 반사되는 시네마틱 스틸, 35mm 필름 그레인",
-    "투명한 유리 소재의 향수병 제품 사진, 부드러운 스튜디오 조명, 파스텔 그라디언트 배경, 미니멀",
-    "K-pop 아이돌 컨셉 포토, 크롬 액세서리와 테크웨어 의상, 하이패션 에디토리얼, 강한 역광",
-    "귀여운 3D 마스코트 캐릭터 턴어라운드 시트, 정면·측면·후면, 흰 배경, 일관된 비율",
-    "포스터 디자인: 'ZIPUP SUMMER' 대형 타이포그래피, 바다와 태양, Y2K 그래픽 스타일",
+    "A woman in a red silk dress walking through a neon-lit Seoul alley at night, wet asphalt reflections, light rain, cinematic 35mm film grain",
+    "Studio product shot of a transparent glass perfume bottle, soft diffused lighting, pastel gradient background, minimal composition, crisp reflections",
+    "K-pop idol concept photo, chrome accessories and techwear outfit, high-fashion editorial, strong backlight, shallow depth of field",
+    "Cute 3D mascot character turnaround sheet, front, side and back views, white background, consistent proportions, soft studio lighting",
+    "Poster design with the large bold headline \"ZIPUP SUMMER\", ocean and sun, Y2K graphic style, grainy texture",
   ],
   video: [
-    "비 오는 밤 도심을 달리는 오토바이를 따라가는 트래킹 샷, 네온 반사, 슬로우 모션, 시네마틱",
-    "무대 위 아이돌이 조명 속에서 회전하며 춤추는 장면, 카메라가 천천히 원을 그리며 이동",
-    "제품이 공중에서 천천히 회전하고 빛이 표면을 훑고 지나가는 광고 컷, 검은 배경",
-    "드론 샷: 새벽 안개가 깔린 산맥 위를 날아가며 해가 떠오르는 장면",
+    "Tracking shot following a motorcycle racing through a rainy city at night, neon reflections, slow motion, cinematic",
+    "An idol spins and dances on stage under colored spotlights while the camera slowly orbits around her, haze in the air",
+    "A product slowly rotates in mid-air as a streak of light sweeps across its surface, black background, commercial look",
+    "Drone shot flying over misty mountain ridges at dawn as the sun rises, golden light, epic scale",
   ],
 };
 
@@ -85,7 +93,17 @@ export function Studio({
   const [lightbox, setLightbox] = React.useState<{ items: LightboxItem[]; index: number } | null>(null);
   const [finalizeId, setFinalizeId] = React.useState<string | null>(null);
   const [libraryOpen, setLibraryOpen] = React.useState(false);
+
+  // 프롬프트 데스크
+  const [doc, setDoc] = React.useState<DeskDoc | null>(prefill.doc ?? null);
   const [saveOpen, setSaveOpen] = React.useState(false);
+  const [tab, setTab] = React.useState<DeskTab>("ko");
+  const [pasteBase, setPasteBase] = React.useState<string | null>(null);
+  const [lastSubmitted, setLastSubmitted] = React.useState<string | null>(null);
+  const [compare, setCompare] = React.useState<Baseline | null>(null);
+  const [converting, setConverting] = React.useState<"en" | "zh" | null>(null);
+  const [highlight, setHighlight] = React.useState<{ start: number; end: number } | null>(null);
+  const [resultsView, setResultsView] = useResultsView(`studio-${kind}`, "batches");
   const promptRef = React.useRef<HTMLTextAreaElement>(null);
   const hydrated = React.useRef(false);
 
@@ -130,6 +148,16 @@ export function Studio({
     }));
   }
 
+  // 글이 바뀌면 강조 해제
+  const [prevPrompt, setPrevPrompt] = React.useState(prompt);
+  if (prevPrompt !== prompt) {
+    setPrevPrompt(prompt);
+    if (highlight) setHighlight(null);
+  }
+
+  /* ------------------------------- 비용·검증 ------------------------------- */
+
+  const st = status[model.id];
   const effectiveCount = Math.min(count, model.count.max);
   const perRequest = model.count.native ? [effectiveCount] : Array.from({ length: effectiveCount }, () => 1);
   const estimateUsd = perRequest.reduce(
@@ -144,8 +172,9 @@ export function Studio({
           refVideos: inputs.videos.length,
           inputVideoSeconds: inputs.videos[0]?.durationSec ?? 0,
           now: new Date(),
+          provider: (params.draft === true ? st?.draftProvider : st?.provider) ?? undefined,
         },
-        status[model.id]?.priceOverrides ?? {},
+        st?.priceOverrides ?? {},
       ),
     0,
   );
@@ -164,8 +193,38 @@ export function Studio({
   const userLeft = budget.user.cap != null ? budget.user.cap - budget.user.spent : null;
   const left = [teamLeft, userLeft].filter((x): x is number => x !== null).sort((a, b) => a - b)[0] ?? null;
   const overBudget = left !== null && estimateMicros > left;
-  const st = status[model.id];
   const disabledReason = !st?.provider ? "API 키가 설정되지 않은 모델이에요" : st.enabled === false ? "관리자가 비활성화한 모델이에요" : overBudget ? "예산이 부족해요" : validation;
+
+  /* ------------------------------ 결과·듀얼 모니터 ------------------------------ */
+
+  const addReference = React.useCallback(
+    (item: RefAsset) => {
+      if (item.kind === "image" && slots.images) setInputs((v) => ({ ...v, images: [...v.images.filter((x) => x.id !== item.id), item].slice(0, slots.images!.max) }));
+      else if (item.kind === "image" && slots.startFrame) setInputs((v) => ({ ...v, startFrame: item }));
+      else if (item.kind === "video" && slots.videos) setInputs((v) => ({ ...v, videos: [item, ...v.videos].slice(0, slots.videos!.max) }));
+      else return toast.error("이 모델에는 넣을 수 없는 파일이에요.");
+      toast("레퍼런스로 추가했어요.");
+    },
+    [slots.images, slots.startFrame, slots.videos],
+  );
+
+  function reuse(g: GenerationDTO) {
+    if (g.modelId !== model.id && models.some((m) => m.id === g.modelId)) setModelId(g.modelId);
+    setParamsByModel((p) => ({ ...p, [g.modelId]: g.params }));
+    if (g.prompt !== prompt && prompt.trim()) setPasteBase(prompt);
+    setPrompt(g.prompt);
+    promptRef.current?.focus();
+    toast("프롬프트와 설정을 불러왔어요.");
+  }
+
+  const dual = useDualMonitor(kind, {
+    onReuse: reuse,
+    onReference: addReference,
+    onFocus: () => {
+      window.focus();
+      promptRef.current?.focus();
+    },
+  });
 
   async function submit() {
     if (disabledReason || submitting) {
@@ -188,8 +247,10 @@ export function Studio({
         projectId,
       });
       push(res.generations);
+      dual.post({ type: "submitted", kind, generations: res.generations });
+      setLastSubmitted(prompt);
       router.refresh();
-      toast.success(`${model.shortName} 생성을 시작했어요`, { description: `${res.generations.length}건 · 예상 ${usd(estimateMicros)}` });
+      toast.success(`${model.shortName} 생성을 시작했어요`, { description: `${res.generations.length}건 · 예상 ${usd(estimateMicros)}${dual.active ? " · 결과 창에서 확인" : ""}` });
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -197,19 +258,21 @@ export function Studio({
     }
   }
 
-  // ⌘/Ctrl + Enter
+  // ⌘/Ctrl + Enter 생성, ⌘/Ctrl + S 저장
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      if (e.key === "Enter") {
         e.preventDefault();
         void submit();
+      } else if (e.key.toLowerCase() === "s" && !document.querySelector("[role=dialog]")) {
+        e.preventDefault();
+        if (prompt.trim()) setSaveOpen(true);
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
-
-  /* --------------------------------- 결과 --------------------------------- */
 
   const history = useInfiniteQuery({
     queryKey: ["generations", "history", kind],
@@ -217,6 +280,7 @@ export function Studio({
     queryFn: ({ pageParam }) =>
       fetchJson<{ items: GenerationDTO[] }>(`/api/generations?kind=${kind}&limit=24${pageParam ? `&before=${encodeURIComponent(pageParam)}` : ""}`).then((r) => r.items),
     getNextPageParam: (last) => (last.length >= 24 ? new Date(new Date(last[last.length - 1].createdAt).getTime() - 1).toISOString() : undefined),
+    enabled: !dual.active,
   });
   const { data: active = [] } = useActiveGenerations();
 
@@ -238,114 +302,238 @@ export function Studio({
 
   const pendingAhead = active.filter((g) => g.status === "pending").length;
 
-  function reuse(g: GenerationDTO) {
-    if (g.modelId !== model.id && models.some((m) => m.id === g.modelId)) setModelId(g.modelId);
-    setParamsByModel((p) => ({ ...p, [g.modelId]: g.params }));
-    setPrompt(g.prompt);
-    promptRef.current?.focus();
-    toast("설정을 불러왔어요. 레퍼런스는 라이트박스의 '이 설정으로 다시'로 함께 불러올 수 있어요.");
+  /* ------------------------------ 번역·추천·버전 ------------------------------ */
+
+  const tr = useTranslation(prompt, true);
+  const primeTranslation = usePrimeTranslation();
+
+  function applySuggestion(index: number, s: Suggestion) {
+    const data = tr.data;
+    if (!data || tr.stale) return;
+    const before = prompt;
+    const out = replaceSegment(prompt, data.segments, index, s.text, s.ko);
+    primeTranslation(out.text, { ...data, segments: out.segments, cached: true });
+    setPrompt(out.text);
+    setHighlight({ start: out.segments[index].start, end: out.segments[index].end });
+    toast.success("영어 프롬프트에 적용했어요", { description: s.text, action: { label: "되돌리기", onClick: () => setPrompt(before) } });
   }
 
+  async function convert(target: "en" | "zh") {
+    if (!prompt.trim()) return;
+    setConverting(target);
+    try {
+      const r = await convertPromptRequest(prompt, target);
+      setPasteBase(prompt);
+      setPrompt(r.text);
+      setTab("ko");
+      toast.success(target === "en" ? "영어 프롬프트로 바꿨어요" : "중국어 프롬프트로 바꿨어요", {
+        description: "한국어 대조로 뜻이 맞는지 확인해 보세요.",
+        action: { label: "되돌리기", onClick: () => setPrompt(prompt) },
+      });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setConverting(null);
+    }
+  }
+
+  const baselines: Baseline[] = [];
+  if (doc) baselines.push({ key: "saved", label: `저장된 v${doc.baseVersion ?? doc.version}`, text: doc.baseText });
+  if (pasteBase !== null) baselines.push({ key: "paste", label: "이전 내용", text: pasteBase });
+  if (lastSubmitted !== null) baselines.push({ key: "submitted", label: "마지막 생성", text: lastSubmitted });
+  if (compare && !baselines.some((b) => b.key === compare.key)) baselines.push(compare);
+  const activeBaseline = (compare && baselines.find((b) => b.key === compare.key)) || baselines[0] || null;
+  const diffCount = React.useMemo(() => {
+    if (!activeBaseline) return 0;
+    const s = diffStats(diffWords(activeBaseline.text, prompt));
+    return s.added + s.removed;
+  }, [activeBaseline, prompt]);
+
+  async function linkDoc(id: string) {
+    try {
+      const r = await fetchJson<{ doc: PromptDocDTO; prompt: string }>(`/api/prompts/${id}`);
+      setDoc({ id: r.doc.id, title: r.doc.title, version: r.doc.latestVersion, visibility: r.doc.visibility, canAddVersion: r.doc.canAddVersion, baseText: r.prompt });
+    } catch {
+      // 연결 실패해도 프롬프트 사용은 가능
+    }
+  }
+
+  /* ---------------------------------- 화면 ---------------------------------- */
+
+  const settingsSummary = [
+    model.params
+      .filter((p) => !p.advanced && !p.hidden?.(params) && p.type === "select")
+      .map((p) => String(params[p.key] ?? ""))
+      .filter(Boolean)
+      .slice(0, 3)
+      .join(" · "),
+    typeof params.duration === "number" && !model.params.find((p) => p.key === "duration")?.hidden?.(params) ? `${params.duration}초` : null,
+    params.draft === true ? "드래프트" : null,
+    inputs.images.length + inputs.videos.length + (inputs.startFrame ? 1 : 0) + (inputs.endFrame ? 1 : 0) > 0
+      ? `레퍼런스 ${inputs.images.length + inputs.videos.length + (inputs.startFrame ? 1 : 0) + (inputs.endFrame ? 1 : 0)}`
+      : null,
+    projects.find((p) => p.id === projectId)?.name,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const tabs = (
+    <DeskTabs tab={tab} onTab={setTab} translating={tr.loading} diffCount={diffCount} versionLabel={doc ? `v${doc.version}` : null}>
+      {tab === "ko" && (
+        <BilingualPanel
+          text={prompt}
+          lang={tr.lang}
+          segments={tr.data?.segments ?? []}
+          loading={tr.loading}
+          error={tr.error}
+          mock={tr.data?.mock}
+          stale={tr.stale}
+          readOnly={tr.stale}
+          onApply={applySuggestion}
+          onFocusRange={(start, end) => setHighlight({ start, end })}
+          onRetry={() => void tr.refetch()}
+          onConvert={convert}
+          converting={converting}
+        />
+      )}
+      {tab === "diff" && <DiffPanel baselines={baselines} active={activeBaseline} onPick={setCompare} current={prompt} />}
+      {tab === "versions" && (
+        <VersionList
+          doc={doc}
+          currentText={prompt}
+          compareVersion={compare?.key.startsWith("v") ? Number(compare.key.slice(1)) : null}
+          onCompare={(v) => {
+            setCompare({ key: `v${v.version}`, label: `v${v.version}`, text: v.prompt });
+            setTab("diff");
+          }}
+          onLoad={(v) => {
+            const before = prompt;
+            setPrompt(v.prompt);
+            if (doc) setDoc({ ...doc, baseText: v.prompt, baseVersion: v.version });
+            if (v.modelId && v.params && models.some((m) => m.id === v.modelId)) {
+              setModelId(v.modelId);
+              setParamsByModel((p) => ({ ...p, [v.modelId!]: v.params! }));
+            }
+            toast(`v${v.version}을 불러왔어요.`, { action: { label: "되돌리기", onClick: () => setPrompt(before) } });
+          }}
+        />
+      )}
+    </DeskTabs>
+  );
+
   return (
-    <div className="grid min-h-[calc(100dvh-56px)] lg:grid-cols-[400px_1fr]">
-      {/* ------------------------------ 설정 패널 ------------------------------ */}
+    <div className={cn("grid min-h-[calc(100dvh-56px)]", !dual.active && "lg:grid-cols-[minmax(0,1.12fr)_minmax(0,1fr)]")}>
+      {/* ------------------------------ 프롬프트 데스크 ------------------------------ */}
       <section className="flex flex-col border-line lg:sticky lg:top-14 lg:h-[calc(100dvh-56px)] lg:border-r" data-hotkeys-scope>
-        <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-4 pb-2 scrollbar-thin sm:p-5">
-          <div className="flex items-center justify-between">
-            <span className="eyebrow">{kind === "image" ? "Image Studio" : "Video Studio"}</span>
-            <ProviderTag status={st} model={model} />
-          </div>
-
-          <ModelPicker
-            models={models}
-            value={model}
-            status={status}
-            onChange={(m) => setModelId(m.id)}
-          />
-          {st?.notes && (
-            <p className="-mt-3 flex gap-2 rounded-xl border border-info/25 bg-info/8 px-3 py-2 text-[12px] leading-relaxed text-fg-2">
-              <Megaphone className="mt-0.5 size-3.5 shrink-0 text-info" />
-              {st.notes}
-            </p>
-          )}
-
-          {/* 프롬프트 */}
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[12.5px] font-medium text-fg-2">프롬프트</span>
-              <div className="flex items-center gap-0.5">
-                <Tip content="영감 받기">
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    onClick={() => {
-                      const list = INSPIRATION[kind];
-                      setPrompt(list[Math.floor(Math.random() * list.length)]);
-                    }}
-                  >
-                    <Wand2 />
-                  </Button>
-                </Tip>
-                <Tip content="프롬프트 라이브러리">
-                  <Button variant="ghost" size="icon-xs" onClick={() => setLibraryOpen(true)}>
-                    <BookText />
-                  </Button>
-                </Tip>
-                <Tip content="프롬프트 저장">
-                  <Button variant="ghost" size="icon-xs" disabled={!prompt.trim()} onClick={() => setSaveOpen(true)}>
-                    <BookmarkPlus />
-                  </Button>
-                </Tip>
+        <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
+          <div className={cn("mx-auto flex w-full flex-col gap-4 p-4 sm:p-6", dual.active && "max-w-[1600px] xl:grid xl:grid-cols-[minmax(0,1.15fr)_minmax(420px,0.85fr)] xl:items-start xl:gap-6")}>
+            <div className="flex min-w-0 flex-col gap-4">
+              {/* 머리글 */}
+              <div className="flex items-center gap-2">
+                <span className="eyebrow">{kind === "image" ? "Image Studio" : "Video Studio"}</span>
+                <ProviderTag status={st} />
+                <div className="ml-auto flex items-center gap-1">
+                  <Tip content="프롬프트 라이브러리">
+                    <Button variant="ghost" size="sm" onClick={() => setLibraryOpen(true)}>
+                      <BookText /> <span className="hidden sm:inline">라이브러리</span>
+                    </Button>
+                  </Tip>
+                  <Tip content={dual.active ? "결과 창이 열려 있어요 (다시 누르면 앞으로)" : "결과를 다른 모니터에 띄우기"}>
+                    <Button
+                      variant={dual.active ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={async () => {
+                        const ok = await dual.open();
+                        if (!ok) toast.error("팝업이 차단됐어요. 주소창의 팝업 허용을 눌러 주세요.");
+                      }}
+                      className={cn(dual.active && "border-accent/40 text-accent")}
+                    >
+                      <MonitorUp /> <span className="hidden sm:inline">{dual.active ? "듀얼 모니터 켜짐" : "듀얼 모니터"}</span>
+                    </Button>
+                  </Tip>
+                </div>
               </div>
-            </div>
-            <div className="rounded-2xl border border-line-2 bg-panel-2/60 transition focus-within:border-fg-3 focus-within:bg-panel-2">
-              <textarea
+
+              <ModelPicker models={models} value={model} status={status} onChange={(m) => setModelId(m.id)} />
+              {st?.notes && (
+                <p className="-mt-1 flex gap-2 rounded-xl border border-info/25 bg-info/8 px-3 py-2 text-[12px] leading-relaxed text-fg-2">
+                  <Megaphone className="mt-0.5 size-3.5 shrink-0 text-info" />
+                  {st.notes}
+                </p>
+              )}
+
+              {/* 주인공: 프롬프트 */}
+              <PromptEditor
                 ref={promptRef}
                 value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                rows={5}
-                placeholder={
-                  kind === "image"
-                    ? "만들고 싶은 장면을 자세히 적어 주세요. 한국어도 좋아요.\n예) 비 오는 밤 네온 거리의 인물 클로즈업, 시네마틱"
-                    : "장면, 움직임, 카메라 무빙, 소리를 적어 주세요.\n예) 카메라가 천천히 다가가며 인물이 뒤돌아본다"
+                onChange={setPrompt}
+                lang={tr.lang}
+                kind={kind}
+                highlight={highlight}
+                onPasteReplace={(before) => {
+                  setPasteBase(before);
+                  setCompare({ key: "paste", label: "이전 내용", text: before });
+                  setTab("diff");
+                  toast("새 버전을 붙여넣었어요 — 달라진 부분을 표시했어요.");
+                }}
+                header={<DocChip doc={doc} text={prompt} onSave={() => setSaveOpen(true)} onVersions={() => setTab("versions")} />}
+                footer={
+                  <div className="flex flex-wrap items-center gap-1">
+                    <Tip content="예시 프롬프트">
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => {
+                          const list = INSPIRATION[kind];
+                          const next = list[Math.floor(Math.random() * list.length)];
+                          if (prompt.trim()) setPasteBase(prompt);
+                          setPrompt(next);
+                        }}
+                      >
+                        <Wand2 /> 영감
+                      </Button>
+                    </Tip>
+                    {tr.lang !== "empty" && tr.lang !== "en" && (
+                      <Button variant="ghost" size="xs" loading={converting === "en"} onClick={() => convert("en")}>
+                        {converting !== "en" && <Languages />} 영어로
+                      </Button>
+                    )}
+                    {tr.lang !== "empty" && tr.lang !== "zh" && (
+                      <Button variant="ghost" size="xs" loading={converting === "zh"} onClick={() => convert("zh")}>
+                        {converting !== "zh" && <Languages />} 中文으로
+                      </Button>
+                    )}
+                  </div>
                 }
-                className="block max-h-[40vh] min-h-[132px] w-full resize-y bg-transparent px-3.5 pt-3 text-[14px] leading-relaxed outline-none placeholder:text-fg-4"
               />
-              <div className="flex items-center justify-between px-3.5 pb-2.5 pt-1">
-                <span className="font-mono text-[10.5px] text-fg-4">{prompt.length} / 5000</span>
-                <span className="text-[10.5px] text-fg-4">
-                  <Kbd>⌘</Kbd> <Kbd>↵</Kbd> 생성
-                </span>
-              </div>
+
+              {!dual.active && tabs}
+
+              <SettingsCard summary={settingsSummary}>
+                <ReferenceSlots slots={slots} value={inputs} onChange={setInputs} projectId={projectId} />
+                <ParamControls model={model} params={params} onChange={(next) => setParamsByModel((p) => ({ ...p, [model.id]: next }))} />
+                <div className="flex flex-col gap-2">
+                  <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-fg-2">
+                    <FolderKanban className="size-3.5" /> 저장할 프로젝트
+                  </span>
+                  <Select
+                    value={projectId}
+                    onValueChange={setProjectId}
+                    options={projects.map((p) => ({ value: p.id, label: p.isPersonal ? `🔒 ${p.name}` : p.name }))}
+                    className="w-full"
+                  />
+                </div>
+                {model.priceNote && <p className="text-[11px] leading-relaxed text-fg-4">{model.priceNote}</p>}
+              </SettingsCard>
             </div>
+
+            {dual.active && <aside className="min-w-0 xl:sticky xl:top-0">{tabs}</aside>}
           </div>
-
-          <ReferenceSlots slots={slots} value={inputs} onChange={setInputs} projectId={projectId} />
-
-          <ParamControls
-            model={model}
-            params={params}
-            onChange={(next) => setParamsByModel((p) => ({ ...p, [model.id]: next }))}
-          />
-
-          {/* 저장 위치 */}
-          <div className="flex flex-col gap-2">
-            <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-fg-2">
-              <FolderKanban className="size-3.5" /> 저장할 프로젝트
-            </span>
-            <Select
-              value={projectId}
-              onValueChange={setProjectId}
-              options={projects.map((p) => ({ value: p.id, label: p.isPersonal ? `🔒 ${p.name}` : p.name }))}
-              className="w-full"
-            />
-          </div>
-          {model.priceNote && <p className="text-[11px] leading-relaxed text-fg-4">{model.priceNote}</p>}
         </div>
 
         {/* 생성 바 */}
-        <div className="sticky bottom-0 z-20 border-t border-line bg-bg-2/85 p-4 backdrop-blur-xl sm:px-5 lg:static">
-          <div className="flex items-center gap-2">
+        <div className="sticky bottom-0 z-20 border-t border-line bg-bg-2/85 px-4 py-3 backdrop-blur-xl sm:px-6 lg:static">
+          <div className={cn("mx-auto flex items-center gap-2", dual.active && "max-w-[1600px]")}>
             <div className="flex items-center rounded-[10px] border border-line-2 bg-panel-2/60">
               <button
                 type="button"
@@ -375,49 +563,59 @@ export function Studio({
                   onClick={submit}
                   loading={submitting}
                   disabled={!!disabledReason}
-                  className={cn("glow-ring h-10 w-full justify-between rounded-[12px] px-4", !disabledReason && "shadow-[0_0_32px_-8px_var(--accent)]")}
+                  className={cn("glow-ring h-11 w-full justify-between rounded-[13px] px-4", !disabledReason && "shadow-[0_0_36px_-8px_var(--accent)]")}
                 >
                   <span className="flex items-center gap-2">
-                    <Sparkles /> {params.draft ? "드래프트 생성" : "생성하기"}
+                    <Sparkles /> {params.draft ? "드래프트 생성 (480p)" : "생성하기"}
                   </span>
                   <span className="font-mono text-[12.5px] opacity-70">{usd(estimateMicros)}</span>
                 </Button>
               </span>
             </Tip>
           </div>
-          <div className="mt-2 flex items-center justify-between text-[11px] text-fg-4">
-            <span>
-              {left !== null ? (
-                <span className={cn(overBudget && "text-danger")}>남은 예산 {usd(Math.max(0, left))}</span>
-              ) : (
-                "예산 한도 없음"
-              )}
-            </span>
+          <div className={cn("mx-auto mt-1.5 flex items-center justify-between text-[11px] text-fg-4", dual.active && "max-w-[1600px]")}>
+            <span>{left !== null ? <span className={cn(overBudget && "text-danger")}>남은 예산 {usd(Math.max(0, left))}</span> : "예산 한도 없음"}</span>
             <span>{pendingAhead > 0 ? `대기열 ${pendingAhead}건` : "예상 비용 · 실패 시 환불"}</span>
           </div>
         </div>
       </section>
 
       {/* ------------------------------ 결과 피드 ------------------------------ */}
-      <section className="min-w-0 p-4 sm:p-6">
-        <ResultsFeed
-          kind={kind}
-          generations={merged}
-          loading={history.isLoading}
-          hasMore={!!history.hasNextPage}
-          loadingMore={history.isFetchingNextPage}
-          onLoadMore={() => history.fetchNextPage()}
-          onOpen={(items, index) => setLightbox({ items, index })}
-          onReuse={reuse}
-          onFinalize={(id) => setFinalizeId(id)}
-          onUseAsReference={(item) => {
-            if (item.kind === "image" && slots.images) setInputs((v) => ({ ...v, images: [...v.images.filter((x) => x.id !== item.id), item].slice(0, slots.images!.max) }));
-            else if (item.kind === "image" && slots.startFrame) setInputs((v) => ({ ...v, startFrame: item }));
-            else if (item.kind === "video" && slots.videos) setInputs((v) => ({ ...v, videos: [item, ...v.videos].slice(0, slots.videos!.max) }));
-            toast("레퍼런스로 추가했어요.");
-          }}
-        />
-      </section>
+      {!dual.active && (
+        <section className="min-w-0 p-4 sm:p-6">
+          <div className="mb-4 flex items-center gap-2">
+            <span className="eyebrow">Results</span>
+            {active.filter((g) => g.kind === kind && isActive(g)).length > 0 && (
+              <span className="flex items-center gap-1.5 text-[11.5px] text-fg-3">
+                <span className="size-1.5 animate-pulse-dot rounded-full bg-accent" /> 생성 중 {active.filter((g) => g.kind === kind && isActive(g)).length}건
+              </span>
+            )}
+            <Segmented
+              size="xs"
+              value={resultsView}
+              onChange={setResultsView}
+              className="ml-auto"
+              options={[
+                { value: "batches", label: "요청별" },
+                { value: "gallery", label: "갤러리" },
+              ]}
+            />
+          </div>
+          <ResultsFeed
+            view={resultsView}
+            kind={kind}
+            generations={merged}
+            loading={history.isLoading}
+            hasMore={!!history.hasNextPage}
+            loadingMore={history.isFetchingNextPage}
+            onLoadMore={() => history.fetchNextPage()}
+            onOpen={(items, index) => setLightbox({ items, index })}
+            onReuse={reuse}
+            onFinalize={(id) => setFinalizeId(id)}
+            onUseAsReference={addReference}
+          />
+        </section>
+      )}
 
       {lightbox && (
         <Lightbox
@@ -434,12 +632,14 @@ export function Studio({
         onOpenChange={setLibraryOpen}
         kind={kind}
         onUse={(p) => {
+          if (prompt.trim() && p.prompt !== prompt) setPasteBase(prompt);
           setPrompt(p.prompt);
           if (p.modelId && models.some((m) => m.id === p.modelId)) setModelId(p.modelId);
           if (p.modelId && p.params) setParamsByModel((x) => ({ ...x, [p.modelId!]: p.params! }));
+          void linkDoc(p.id);
         }}
       />
-      <SavePromptDialog open={saveOpen} onOpenChange={setSaveOpen} prompt={prompt} kind={kind} modelId={model.id} params={params} />
+      <SaveVersionDialog open={saveOpen} onOpenChange={setSaveOpen} doc={doc} text={prompt} kind={kind} modelId={model.id} params={params} onSaved={setDoc} />
     </div>
   );
 }
