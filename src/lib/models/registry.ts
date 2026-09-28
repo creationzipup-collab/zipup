@@ -110,6 +110,7 @@ const SEEDREAM_PRICES: PriceItem[] = [
 
 const seedream5Pro: ModelDef = {
   id: "seedream-5-pro",
+  mentionStyle: "natural",
   name: "Seedream 5.0 Pro",
   shortName: "Seedream 5 Pro",
   vendor: "ByteDance",
@@ -196,6 +197,7 @@ const NB_PRO_PRICES: PriceItem[] = [
 
 const nanoBananaPro: ModelDef = {
   id: "nano-banana-pro",
+  mentionStyle: "natural",
   name: "Nano Banana Pro",
   shortName: "Nano Banana Pro",
   vendor: "Google",
@@ -270,6 +272,7 @@ const NB2_RES_MULT: Record<string, number> = { "0.5K": 0.75, "1K": 1, "2K": 1.5,
 
 const nanoBanana2: ModelDef = {
   id: "nano-banana-2",
+  mentionStyle: "natural",
   name: "Nano Banana 2",
   shortName: "Nano Banana 2",
   vendor: "Google",
@@ -367,6 +370,7 @@ const GPT25_PRICES: PriceItem[] = [
 
 const gptImage25: ModelDef = {
   id: "gpt-image-2-5",
+  mentionStyle: "natural",
   name: "GPT Image 2.5",
   shortName: "GPT Image 2.5",
   vendor: "OpenAI",
@@ -485,6 +489,7 @@ const GPT2_PRICES: PriceItem[] = [{ key: "multiplier", label: "추정 단가 배
 
 const gptImage2: ModelDef = {
   id: "gpt-image-2",
+  mentionStyle: "natural",
   name: "GPT Image 2.0",
   shortName: "GPT Image 2",
   vendor: "OpenAI",
@@ -582,6 +587,7 @@ const H3_PRICES: PriceItem[] = [
 
 const minimaxH3: ModelDef = {
   id: "minimax-h3",
+  mentionStyle: "word",
   name: "MiniMax H3",
   shortName: "H3",
   vendor: "MiniMax",
@@ -717,6 +723,7 @@ function seedanceDuration(params: Record<string, unknown>): number {
 
 const seedance25: ModelDef = {
   id: "seedance-2-5",
+  mentionStyle: "at",
   name: "Seedance 2.5",
   shortName: "Seedance 2.5",
   vendor: "ByteDance",

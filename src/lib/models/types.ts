@@ -122,6 +122,8 @@ export type ModelDef = {
   }) => string | null;
   /** 가격 안내 문구 */
   priceNote?: string;
+  /** 프롬프트에서 레퍼런스를 부르는 방식 (at: @Image1 · word: Image 1 · natural: image 1) */
+  mentionStyle?: "at" | "word" | "natural";
   supportsDraft?: boolean;
   /** 대체 공급자용 요청 생성 (기본 공급자 키가 없거나 관리자가 고정했을 때) */
   altBuilds?: Partial<Record<ProviderKey, (ctx: BuildContext) => BuiltRequest>>;

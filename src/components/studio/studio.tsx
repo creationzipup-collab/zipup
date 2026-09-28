@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { Lightbox, type LightboxItem } from "@/components/assets/lightbox";
 import { BilingualPanel } from "@/components/prompt-desk/bilingual-panel";
 import { type Baseline, DeskTabs, type DeskTab, DiffPanel, DocChip, SettingsCard } from "@/components/prompt-desk/desk-panels";
-import { PromptEditor } from "@/components/prompt-desk/prompt-editor";
+import { type EditorMark, PromptEditor } from "@/components/prompt-desk/prompt-editor";
 import { type DeskDoc, SaveVersionDialog, VersionList } from "@/components/prompt-desk/versions";
 import { PromptLibraryDialog } from "@/components/prompts/prompt-dialogs";
 import { useShell } from "@/components/shell/app-shell";
@@ -32,7 +32,18 @@ import { useDualMonitor } from "@/lib/client/studio-channel";
 import { useResultsView } from "@/lib/client/use-results-view";
 import { defaultParams, IMAGE_MODELS, sanitizeParams, VIDEO_MODELS } from "@/lib/models/registry";
 import type { ModelDef } from "@/lib/models/types";
+import { MentionPanel, type MentionRef } from "@/components/prompt-desk/mention-panel";
 import { matchCase } from "@/lib/client/lexicon";
+import {
+  findMentions,
+  linkMentions,
+  MENTION_STYLE_LABEL,
+  mentionIssues,
+  type MentionStyle,
+  normalizeMentions,
+  orderByMentions,
+  renameGroup,
+} from "@/lib/prompt/mentions";
 import { replaceSegment } from "@/lib/prompt/align";
 import { diffStats, diffWords } from "@/lib/prompt/diff";
 import type { EditableProject, StudioPrefill } from "@/lib/services/studio";
@@ -329,6 +340,98 @@ export function Studio({
     toast.success(`${original} → ${next}`, { action: { label: "되돌리기", onClick: () => setPrompt(before) } });
   }
 
+  /* ------------------------------ @언급 정리 ------------------------------ */
+
+  const mentionStyle: MentionStyle | null = slots.images || slots.videos ? (model.mentionStyle ?? "natural") : null;
+  const mentionRefs: MentionRef[] = React.useMemo(
+    () => [
+      ...inputs.images.map((a, i) => ({ id: a.id, kind: "image" as const, order: i + 1, filename: a.filename, thumb: a.urls.thumb, src: a.urls.src })),
+      ...inputs.videos.map((a, i) => ({ id: a.id, kind: "video" as const, order: i + 1, filename: a.filename, thumb: a.urls.thumb, src: a.urls.src })),
+    ],
+    [inputs.images, inputs.videos],
+  );
+  const [manualLinks, setManualLinks] = React.useState<Record<string, string | null>>({});
+  const mentions = React.useMemo(() => findMentions(prompt), [prompt]);
+  const mentionGroups = React.useMemo(() => linkMentions(mentions, mentionRefs, manualLinks), [mentions, mentionRefs, manualLinks]);
+  const mentionFix = React.useMemo(
+    () => (mentionStyle ? normalizeMentions(prompt, mentionGroups, mentionRefs, mentionStyle) : { text: prompt, changed: 0 }),
+    [prompt, mentionGroups, mentionRefs, mentionStyle],
+  );
+  const mentionOrdered = React.useMemo(() => {
+    const imgs = orderByMentions(inputs.images, mentionGroups, mentions);
+    const vids = orderByMentions(inputs.videos, mentionGroups, mentions);
+    const same = (a: { id: string }[], b: { id: string }[]) => a.every((x, i) => x.id === b[i]?.id);
+    return same(imgs, inputs.images) && same(vids, inputs.videos) ? null : { images: imgs, videos: vids };
+  }, [inputs.images, inputs.videos, mentionGroups, mentions]);
+  const editorMarks: EditorMark[] = React.useMemo(() => {
+    const byId = new Map(mentionRefs.map((r) => [r.id, r]));
+    return mentionGroups.flatMap((g) => {
+      const ref = g.refId ? byId.get(g.refId) : undefined;
+      const tone: EditorMark["tone"] = g.status === "linked" ? "ok" : g.status === "guessed" ? "info" : g.status === "missing" ? "error" : "warn";
+      return g.mentions
+        .filter((m) => m.explicit || ref)
+        .map((m) => ({
+          start: m.start,
+          end: m.end,
+          tone,
+          title: ref ? `${m.raw} → ${ref.kind === "video" ? "영상" : "이미지"} ${ref.order}` : m.raw,
+          subtitle: ref ? ref.filename : g.reason,
+          thumb: ref?.thumb,
+        }));
+    });
+  }, [mentionGroups, mentionRefs]);
+
+  function normalizeAllMentions() {
+    if (!mentionStyle || !mentionFix.changed) return;
+    const before = prompt;
+    setPrompt(mentionFix.text);
+    setManualLinks({});
+    toast.success(`언급 ${mentionFix.changed}곳을 ${MENTION_STYLE_LABEL[mentionStyle]} 형식으로 정리했어요`, { action: { label: "되돌리기", onClick: () => setPrompt(before) } });
+  }
+
+  function reorderByMentions() {
+    if (!mentionOrdered || !mentionStyle) return;
+    const before = { prompt, inputs };
+    const nextInputs = { ...inputs, images: mentionOrdered.images, videos: mentionOrdered.videos };
+    // 레퍼런스 순서가 바뀌면 번호도 바뀌므로 언급도 새 번호로 다시 씀
+    const nextRefs: MentionRef[] = [
+      ...nextInputs.images.map((a, i) => ({ id: a.id, kind: "image" as const, order: i + 1, filename: a.filename, thumb: a.urls.thumb })),
+      ...nextInputs.videos.map((a, i) => ({ id: a.id, kind: "video" as const, order: i + 1, filename: a.filename, thumb: a.urls.thumb })),
+    ];
+    const out = normalizeMentions(prompt, mentionGroups, nextRefs, mentionStyle);
+    setInputs(nextInputs);
+    setPrompt(out.text);
+    setManualLinks({});
+    toast.success("언급한 순서대로 레퍼런스를 정렬했어요", {
+      action: {
+        label: "되돌리기",
+        onClick: () => {
+          setInputs(before.inputs);
+          setPrompt(before.prompt);
+        },
+      },
+    });
+  }
+
+  /** 커서 자리에 글 넣기 (앞뒤 띄어쓰기 맞춤) */
+  function insertAtCursor(text: string) {
+    const el = promptRef.current;
+    const at = el ? el.selectionStart : prompt.length;
+    const end = el ? el.selectionEnd : prompt.length;
+    const before = prompt.slice(0, at);
+    const after = prompt.slice(end);
+    const lead = before && !/\s$/.test(before) ? " " : "";
+    const trail = after && !/^[\s,.;:!?]/.test(after) ? " " : "";
+    const next = `${before}${lead}${text}${trail}${after}`;
+    setPrompt(next);
+    const caret = before.length + lead.length + text.length;
+    setHighlight({ start: before.length + lead.length, end: caret }, next);
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(caret, caret);
+    });
+  }
+
   async function convert(target: "en" | "zh") {
     if (!prompt.trim()) return;
     setConverting(target);
@@ -389,7 +492,14 @@ export function Studio({
     .join(" · ");
 
   const tabs = (
-    <DeskTabs tab={tab} onTab={setTab} translating={tr.loading} diffCount={diffCount} versionLabel={doc ? `v${doc.version}` : null}>
+    <DeskTabs
+      tab={tab}
+      onTab={setTab}
+      translating={tr.loading}
+      diffCount={diffCount}
+      versionLabel={doc ? `v${doc.version}` : null}
+      mentions={mentionStyle || mentionGroups.length ? { count: mentionGroups.length, issues: mentionIssues(mentionGroups) } : null}
+    >
       {tab === "ko" && (
         <BilingualPanel
           text={prompt}
@@ -407,6 +517,32 @@ export function Studio({
           onRetry={() => void tr.refetch()}
           onConvert={convert}
           converting={converting}
+        />
+      )}
+      {tab === "mentions" && (
+        <MentionPanel
+          groups={mentionGroups}
+          refs={mentionRefs}
+          style={mentionStyle}
+          modelName={model.name}
+          pendingChanges={mentionFix.changed}
+          canReorder={!!mentionOrdered}
+          onNormalize={normalizeAllMentions}
+          onRelink={(key, refId) => setManualLinks((m) => ({ ...m, [key]: refId }))}
+          onRename={(key, to) => {
+            const g = mentionGroups.find((x) => x.key === key);
+            if (!g) return;
+            const before = prompt;
+            setPrompt(renameGroup(prompt, g, to));
+            toast.success(`${g.label} → ${to} (${g.mentions.length}곳)`, { action: { label: "되돌리기", onClick: () => setPrompt(before) } });
+          }}
+          onInsert={insertAtCursor}
+          onReorder={reorderByMentions}
+          onFocus={(start, end) => {
+            setHighlight({ start, end }, prompt);
+            promptRef.current?.focus();
+            promptRef.current?.setSelectionRange(start, end);
+          }}
         />
       )}
       {tab === "diff" && <DiffPanel baselines={baselines} active={activeBaseline} onPick={setCompare} current={prompt} />}
@@ -483,6 +619,7 @@ export function Studio({
                 lang={tr.lang}
                 kind={kind}
                 highlight={highlight}
+                marks={editorMarks}
                 onReplace={replaceRange}
                 onPasteReplace={(before) => {
                   setPasteBase(before);
@@ -524,7 +661,7 @@ export function Studio({
               {!dual.active && tabs}
 
               <SettingsCard summary={settingsSummary}>
-                <ReferenceSlots slots={slots} value={inputs} onChange={setInputs} projectId={projectId} />
+                <ReferenceSlots slots={slots} value={inputs} onChange={setInputs} projectId={projectId} mentionStyle={mentionStyle} onInsertMention={insertAtCursor} />
                 <ParamControls model={model} params={params} onChange={(next) => setParamsByModel((p) => ({ ...p, [model.id]: next }))} />
                 <div className="flex flex-col gap-2">
                   <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-fg-2">

@@ -9,6 +9,7 @@ import { MediaThumb } from "@/components/assets/media";
 import { Menu, MenuContent, MenuItem, MenuTrigger, Tip } from "@/components/ui/menu";
 import { uploadFile } from "@/lib/client/upload";
 import type { InputSlots } from "@/lib/models/types";
+import { formatMention, type MentionStyle } from "@/lib/prompt/mentions";
 import { ACCEPT_UPLOADS } from "@/lib/uploads";
 import { cn } from "@/lib/utils";
 
@@ -59,11 +60,17 @@ export function ReferenceSlots({
   value,
   onChange,
   projectId,
+  mentionStyle,
+  onInsertMention,
 }: {
   slots: InputSlots;
   value: StudioInputs;
   onChange: (v: StudioInputs) => void;
   projectId?: string | null;
+  /** 썸네일에 프롬프트 언급 이름표(@Image1 등) 표시 */
+  mentionStyle?: MentionStyle | null;
+  /** 이름표를 누르면 프롬프트 커서 자리에 넣기 */
+  onInsertMention?: (text: string) => void;
 }) {
   const { uploading, upload } = useUploader(projectId);
   const [picker, setPicker] = React.useState<{ slot: SlotKey } | null>(null);
@@ -201,6 +208,8 @@ export function ReferenceSlots({
           onRemove={(id) => onChange({ ...value, images: value.images.filter((x) => x.id !== id) })}
           onUpload={() => openUpload("images")}
           onPick={() => setPicker({ slot: "images" })}
+          tagFor={mentionStyle ? (i) => formatMention("image", i + 1, mentionStyle) : undefined}
+          onTag={onInsertMention}
         />
       )}
       {slots.videos && (
@@ -214,6 +223,8 @@ export function ReferenceSlots({
           onUpload={() => openUpload("videos")}
           onPick={() => setPicker({ slot: "videos" })}
           video
+          tagFor={mentionStyle ? (i) => formatMention("video", i + 1, mentionStyle) : undefined}
+          onTag={onInsertMention}
         />
       )}
 
@@ -315,6 +326,8 @@ function RefRow({
   onUpload,
   onPick,
   video,
+  tagFor,
+  onTag,
 }: {
   label: string;
   hint?: string;
@@ -325,6 +338,8 @@ function RefRow({
   onUpload: () => void;
   onPick: () => void;
   video?: boolean;
+  tagFor?: (index: number) => string;
+  onTag?: (tag: string) => void;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -338,8 +353,18 @@ function RefRow({
         {items.map((a, i) => (
           <div key={a.id} className="group relative size-16 overflow-hidden rounded-xl border border-line-2">
             <MediaThumb kind={a.kind} thumb={a.urls.thumb} src={a.urls.src} durationSec={a.durationSec} />
-            {video && i === 0 && (
+            {video && i === 0 && !tagFor && (
               <span className="absolute left-1 top-1 rounded bg-black/60 px-1 font-mono text-[9px] text-white">SRC</span>
+            )}
+            {tagFor && (
+              <button
+                type="button"
+                onClick={() => onTag?.(tagFor(i))}
+                title="눌러서 프롬프트에 넣기"
+                className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/80 to-black/0 px-1 pb-0.5 pt-2 text-left font-mono text-[9.5px] text-white transition hover:text-accent"
+              >
+                {tagFor(i)}
+              </button>
             )}
             <button
               type="button"

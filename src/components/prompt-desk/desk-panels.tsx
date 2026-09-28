@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, FileText, GitCompareArrows, History, Languages, Link2, Save } from "lucide-react";
+import { AtSign, ChevronDown, FileText, GitCompareArrows, History, Languages, Link2, Save } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import * as React from "react";
 
@@ -12,7 +12,7 @@ import { Tip } from "@/components/ui/menu";
 import { diffStats, diffWords } from "@/lib/prompt/diff";
 import { cn } from "@/lib/utils";
 
-export type DeskTab = "ko" | "diff" | "versions";
+export type DeskTab = "ko" | "mentions" | "diff" | "versions";
 export type Baseline = { key: string; label: string; text: string };
 
 /** 편집기 상단: 지금 편집 중인 프롬프트 문서와 버전 */
@@ -55,6 +55,7 @@ export function DeskTabs({
   translating,
   diffCount,
   versionLabel,
+  mentions,
   children,
   className,
 }: {
@@ -63,11 +64,27 @@ export function DeskTabs({
   translating: boolean;
   diffCount: number;
   versionLabel: string | null;
+  /** @언급 탭 (레퍼런스를 받는 모델이거나 언급이 있을 때) */
+  mentions?: { count: number; issues: number } | null;
   children: React.ReactNode;
   className?: string;
 }) {
   const items: { id: DeskTab; label: string; icon: React.ElementType; extra?: React.ReactNode }[] = [
     { id: "ko", label: "한국어 대조", icon: Languages, extra: translating ? <Spinner className="size-3" /> : null },
+    ...(mentions
+      ? [
+          {
+            id: "mentions" as const,
+            label: "언급",
+            icon: AtSign,
+            extra: mentions.issues ? (
+              <span className="rounded-full bg-warning/15 px-1.5 font-mono text-[10px] text-warning">{mentions.issues}</span>
+            ) : mentions.count ? (
+              <span className="font-mono text-[10.5px] text-fg-4">{mentions.count}</span>
+            ) : null,
+          },
+        ]
+      : []),
     { id: "diff", label: "변경 비교", icon: GitCompareArrows, extra: diffCount ? <span className="rounded-full bg-accent-soft px-1.5 font-mono text-[10px] text-accent">{diffCount}</span> : null },
     { id: "versions", label: "버전 기록", icon: History, extra: versionLabel ? <span className="font-mono text-[10.5px] text-fg-4">{versionLabel}</span> : null },
   ];

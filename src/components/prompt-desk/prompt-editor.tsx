@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 
 import { useHoverCard, WordCard, type WordTarget } from "@/components/prompt-desk/word-card";
 import { Kbd } from "@/components/ui/misc";
@@ -8,8 +9,27 @@ import { lexLangOf, matchCase, phraseAt, wordTokens } from "@/lib/client/lexicon
 import { LANG_LABEL, type PromptLang } from "@/lib/prompt/lang";
 import { cn } from "@/lib/utils";
 
+/** 편집기 안에서 색으로 표시할 구간 (예: @언급 연결 상태) */
+export type EditorMark = {
+  start: number;
+  end: number;
+  tone: "ok" | "info" | "warn" | "error";
+  title: string;
+  subtitle?: string;
+  thumb?: string;
+};
+
+const MARK_TONE: Record<EditorMark["tone"], string> = {
+  ok: "bg-success/15 shadow-[0_0_0_1px_color-mix(in_oklab,var(--success)_35%,transparent)]",
+  info: "bg-info/15 shadow-[0_0_0_1px_color-mix(in_oklab,var(--info)_35%,transparent)]",
+  warn: "bg-warning/18 shadow-[0_0_0_1px_color-mix(in_oklab,var(--warning)_45%,transparent)]",
+  error: "bg-danger/18 shadow-[0_0_0_1px_color-mix(in_oklab,var(--danger)_45%,transparent)]",
+};
+
 type Props = {
   value: string;
+  /** @언급 등 표시할 구간 */
+  marks?: EditorMark[];
   onChange: (v: string) => void;
   /** 내용 대부분을 붙여넣어 바꿨을 때 (이전 내용, 새 내용) */
   onPasteReplace?: (before: string, after: string) => void;
@@ -34,11 +54,14 @@ const PLACEHOLDER = {
 
 /** 스튜디오의 주인공: 큰 프롬프트 편집기 (단어에 마우스를 올리면 뜻, 더블클릭하면 바꾸기) */
 export const PromptEditor = React.forwardRef<HTMLTextAreaElement, Props>(function PromptEditor(
-  { value, onChange, onPasteReplace, onReplace, lang, kind, header, footer, size = "lg", maxLength = 7000, highlight },
+  { value, marks, onChange, onPasteReplace, onReplace, lang, kind, header, footer, size = "lg", maxLength = 7000, highlight },
   ref,
 ) {
   const inner = React.useRef<HTMLTextAreaElement | null>(null);
   const backdrop = React.useRef<HTMLDivElement | null>(null);
+  const marksLayer = React.useRef<HTMLDivElement | null>(null);
+  const [markHover, setMarkHover] = React.useState<{ mark: EditorMark; rect: { left: number; top: number; bottom: number; width: number } } | null>(null);
+  const validMarks = React.useMemo(() => (marks ?? []).filter((m) => m.end > m.start && m.end <= value.length).sort((a, b) => a.start - b.start), [marks, value.length]);
   const mirror = React.useRef<HTMLDivElement | null>(null);
   const [gutter, setGutter] = React.useState(0);
   const textClass = cn("px-5 pb-3 pt-2 leading-[1.75] whitespace-pre-wrap break-words", size === "lg" ? "text-[16.5px]" : "text-[15px]");
@@ -59,7 +82,11 @@ export const PromptEditor = React.forwardRef<HTMLTextAreaElement, Props>(functio
   }, [value, size]);
 
   const hoverable = lang !== "empty" && lang !== "ko";
-  const tokens = React.useMemo(() => (hoverable ? wordTokens(value, lang) : []), [value, lang, hoverable]);
+  // 언급 표시가 있으면 한국어 프롬프트에서도 단어 위치를 계산
+  const tokens = React.useMemo(
+    () => (hoverable ? wordTokens(value, lang) : validMarks.length ? wordTokens(value, "mixed") : []),
+    [value, lang, hoverable, validMarks.length],
+  );
 
   // 단어 위치를 찾기 위한 보이지 않는 복제 레이어 (textarea와 같은 줄바꿈)
   const mirrorNodes = React.useMemo(() => {
@@ -139,6 +166,11 @@ export const PromptEditor = React.forwardRef<HTMLTextAreaElement, Props>(functio
           )}
         </div>
         <div className="relative">
+          {validMarks.length > 0 && (
+            <div ref={marksLayer} aria-hidden className={cn("pointer-events-none absolute inset-0 overflow-hidden text-transparent", textClass)} style={layerStyle}>
+              {renderMarks(value, validMarks)}
+            </div>
+          )}
           {mirrorNodes && (
             <div ref={mirror} aria-hidden className={cn("pointer-events-none absolute inset-0 select-none overflow-hidden text-transparent", textClass)} style={layerStyle}>
               {mirrorNodes}
@@ -160,6 +192,8 @@ export const PromptEditor = React.forwardRef<HTMLTextAreaElement, Props>(functio
               const top = e.currentTarget.scrollTop;
               if (backdrop.current) backdrop.current.scrollTop = top;
               if (mirror.current) mirror.current.scrollTop = top;
+              if (marksLayer.current) marksLayer.current.scrollTop = top;
+              setMarkHover(null);
               if (card.target?.mode === "info") card.close();
             }}
             maxLength={maxLength}
@@ -180,11 +214,22 @@ export const PromptEditor = React.forwardRef<HTMLTextAreaElement, Props>(functio
               pasting.current = { before: el.value, big: selectedAll || pasted.length >= Math.max(40, el.value.length * 0.6) };
             }}
             onMouseMove={(e) => {
-              if (!hoverable || e.buttons) return;
+              if ((!hoverable && !validMarks.length) || e.buttons) return;
               const { clientX, clientY } = e;
               if (frame.current) cancelAnimationFrame(frame.current);
               frame.current = requestAnimationFrame(() => {
                 const i = tokenAt(clientX, clientY);
+                // @언급 위라면 연결된 레퍼런스를 보여 줌
+                const tok = i === null ? null : tokens[i];
+                const mark = tok ? validMarks.find((m) => tok.start < m.end && tok.end > m.start) : undefined;
+                if (mark) {
+                  const rect = rectOf(mark.start, mark.end);
+                  if (rect) setMarkHover((h) => (h?.mark === mark ? h : { mark, rect }));
+                  card.scheduleHide();
+                  return;
+                }
+                setMarkHover(null);
+                if (!hoverable) return;
                 const t = i === null ? null : targetAt(i, "info");
                 if (t) card.show(t);
                 else if (card.target?.mode !== "replace") card.scheduleHide();
@@ -192,6 +237,7 @@ export const PromptEditor = React.forwardRef<HTMLTextAreaElement, Props>(functio
             }}
             onMouseLeave={() => {
               if (frame.current) cancelAnimationFrame(frame.current);
+              setMarkHover(null);
               card.scheduleHide();
             }}
             onMouseUp={(e) => {
@@ -231,9 +277,62 @@ export const PromptEditor = React.forwardRef<HTMLTextAreaElement, Props>(functio
         </div>
       </div>
       <WordCard target={card.target} onClose={card.close} onReplace={replace} onHoverChange={card.onHoverChange} onReplaceMode={card.markReplacing} />
+      <MarkCard hover={markHover} />
     </div>
   );
 });
+
+function renderMarks(value: string, marks: EditorMark[]): React.ReactNode[] {
+  const out: React.ReactNode[] = [];
+  let pos = 0;
+  marks.forEach((m, i) => {
+    if (m.start < pos) return;
+    if (m.start > pos) out.push(value.slice(pos, m.start));
+    out.push(
+      <span key={i} className={cn("rounded-[5px]", MARK_TONE[m.tone])}>
+        {value.slice(m.start, m.end)}
+      </span>,
+    );
+    pos = m.end;
+  });
+  out.push(`${value.slice(pos)}\u200b`);
+  return out;
+}
+
+const noopSubscribe = () => () => {};
+
+/** @언급 위에 마우스를 올렸을 때: 연결된 레퍼런스 미리보기 */
+function MarkCard({ hover }: { hover: { mark: EditorMark; rect: { left: number; top: number; bottom: number; width: number } } | null }) {
+  const isClient = React.useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
+  );
+  if (!isClient || !hover) return null;
+  const { mark, rect } = hover;
+  const width = 220;
+  const left = Math.min(Math.max(12, rect.left + rect.width / 2 - width / 2), window.innerWidth - width - 12);
+  const top = rect.bottom + 8;
+  return createPortal(
+    <div
+      style={{ left, top, width }}
+      className="pointer-events-none fixed z-[80] flex items-center gap-2.5 rounded-xl border border-line-2 bg-panel/95 p-2 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.6)] backdrop-blur-xl"
+    >
+      {mark.thumb ? (
+        // 서명된 원본 URL을 그대로 씀 (이미지 최적화 비용 없음)
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={mark.thumb} alt="" className="size-12 shrink-0 rounded-lg object-cover" />
+      ) : (
+        <span className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-panel-3 text-[18px] text-fg-4">?</span>
+      )}
+      <span className="min-w-0">
+        <span className="block truncate text-[12.5px] font-medium text-fg">{mark.title}</span>
+        {mark.subtitle && <span className="block text-[11px] leading-snug text-fg-3">{mark.subtitle}</span>}
+      </span>
+    </div>,
+    document.body,
+  );
+}
 
 /** 읽기 전용 글(한국어 대조의 원문 칸 등)에서 단어 뜻 보기·바꾸기 */
 export function HoverText({
