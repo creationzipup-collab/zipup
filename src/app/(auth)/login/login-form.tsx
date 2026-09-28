@@ -37,7 +37,11 @@ export function LoginForm({ next, googleEnabled }: { next?: string; googleEnable
       <div className="flex flex-col gap-5">
         <BrandLockup className="lg:hidden" />
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">다시 오셨네요</h2>
+          <p className="section-index flex items-center gap-2 uppercase">
+            <span className="h-px w-5 bg-accent" />
+            Sign in
+          </p>
+          <h2 className="mt-2 text-[28px] font-semibold tracking-[-0.03em]">다시 오셨네요</h2>
           <p className="mt-1.5 text-sm text-fg-3">회사 계정으로 로그인하세요.</p>
         </div>
       </div>

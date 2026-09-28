@@ -6,6 +6,7 @@ import Link from "next/link";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { PageTitle } from "@/components/brand/page-title";
 import { type PromptPreset, usePrompts, VIS_ICON } from "@/components/prompts/prompt-dialogs";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
@@ -46,15 +47,17 @@ export function PromptsView({ isAdmin }: { isAdmin: boolean }) {
 
   return (
     <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-[24px] font-semibold tracking-[-0.02em]">프롬프트</h1>
-          <p className="mt-1 text-sm text-fg-3">잘 나온 프롬프트를 모델·설정과 함께 저장하고 팀과 나눠 써요.</p>
-        </div>
-        <Button variant="primary" onClick={() => setDraft({ title: "", prompt: "", tags: "", visibility: "team", kind: "any" })}>
-          <Plus /> 새 프롬프트
-        </Button>
-      </div>
+      <PageTitle
+        label="Scripts"
+        title="프롬프트"
+        accent="Words become frames."
+        subtitle="잘 나온 프롬프트를 모델·설정과 함께 저장하고 팀과 나눠 써요."
+        actions={
+          <Button variant="primary" onClick={() => setDraft({ title: "", prompt: "", tags: "", visibility: "team", kind: "any" })}>
+            <Plus /> 새 프롬프트
+          </Button>
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[240px] flex-1 sm:max-w-sm">

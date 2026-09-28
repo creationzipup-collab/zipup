@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { PageTitle } from "@/components/brand/page-title";
 import { useTheme } from "@/components/providers";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/controls";
@@ -22,10 +23,7 @@ type Stats = { images: number; videos: number; uploads: number; favorites: numbe
 export function AccountSettings({ me, budget, stats, warnPercent }: { me: Me; budget: BudgetStatus; stats: Stats; warnPercent: number }) {
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 py-6 sm:px-8 sm:py-8">
-      <div>
-        <h1 className="text-[24px] font-semibold tracking-[-0.02em]">설정</h1>
-        <p className="mt-1 text-sm text-fg-3">내 프로필, 비밀번호, 화면, 이번 달 사용량을 관리해요.</p>
-      </div>
+      <PageTitle label="Settings" title="설정" accent="Your setup." subtitle="내 프로필, 비밀번호, 화면, 이번 달 사용량을 관리해요." />
       <UsageCard budget={budget} stats={stats} warnPercent={warnPercent} />
       <ProfileSection me={me} />
       <PasswordSection />

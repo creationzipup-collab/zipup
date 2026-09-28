@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { trackSpotlight } from "@/components/brand/motion";
+import { PageTitle } from "@/components/brand/page-title";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/controls";
 import { Dialog, DialogBody, DialogContent, DialogFooter } from "@/components/ui/dialog";
@@ -48,17 +50,19 @@ export function CanvasList({ projects, openNew, canCreate }: { projects: Editabl
 
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-[24px] font-semibold tracking-[-0.02em]">노드 캔버스</h1>
-          <p className="mt-1 text-sm text-fg-3">프롬프트 → 이미지 → 영상 과정을 노드로 연결해 반복 가능한 워크플로를 만들어요.</p>
-        </div>
-        {canCreate && (
-          <Button variant="primary" onClick={() => setOpen(true)}>
-            <Plus /> 새 캔버스
-          </Button>
-        )}
-      </div>
+      <PageTitle
+        label="Pipelines"
+        title="노드 캔버스"
+        accent="Wire the scene."
+        subtitle="프롬프트 → 이미지 → 영상 과정을 노드로 연결해 반복 가능한 워크플로를 만들어요."
+        actions={
+          canCreate && (
+            <Button variant="primary" onClick={() => setOpen(true)}>
+              <Plus /> 새 캔버스
+            </Button>
+          )
+        }
+      />
 
       {isLoading ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="skeleton h-36 rounded-2xl" />)}</div>
@@ -67,7 +71,12 @@ export function CanvasList({ projects, openNew, canCreate }: { projects: Editabl
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {data.map((c) => (
-            <Link key={c.id} href={`/canvas/${c.id}`} className="dot-grid group flex min-h-36 flex-col justify-between rounded-2xl border border-line bg-panel p-4 transition hover:border-line-2 hover:bg-panel-2/60">
+            <Link
+              key={c.id}
+              href={`/canvas/${c.id}`}
+              onPointerMove={trackSpotlight}
+              className="spotlight dot-grid group flex min-h-36 flex-col justify-between rounded-2xl border border-line bg-panel p-4 transition duration-300 hover:-translate-y-0.5 hover:border-line-2"
+            >
               <div className="flex items-center justify-between">
                 <Workflow className="size-5 text-fg-3" />
                 <ArrowRight className="size-4 text-fg-4 transition group-hover:translate-x-0.5 group-hover:text-fg" />

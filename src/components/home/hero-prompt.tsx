@@ -73,7 +73,7 @@ export function HeroPrompt({ recent }: { recent: { id: string; title: string; pr
                     animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
                     exit={{ opacity: 0, y: -6, filter: "blur(4px)" }}
                     transition={{ duration: 0.35 }}
-                    className="line-clamp-2 block"
+                    className="line-clamp-2"
                   >
                     {EXAMPLES[example]}
                   </motion.span>
@@ -82,7 +82,7 @@ export function HeroPrompt({ recent }: { recent: { id: string; title: string; pr
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2 px-3 pb-3">
-            <span className="px-2 text-[11.5px] text-fg-4">한·영·중 어느 언어로 써도 돼요 — 스튜디오에서 한국어 대조와 표현 추천이 이어져요</span>
+            <span className="hidden px-2 text-[11.5px] text-fg-4 sm:inline">한·영·중 어느 언어로 써도 돼요 — 스튜디오에서 한국어 대조와 표현 추천이 이어져요</span>
             <div className="ml-auto flex items-center gap-2">
               <button
                 type="button"

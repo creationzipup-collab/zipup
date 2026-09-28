@@ -13,6 +13,8 @@ export default async function LibraryPage() {
       <Suspense>
         <AssetBrowser
           title="라이브러리"
+          label="Archive"
+          accent="Every take, kept."
           subtitle="접근 가능한 모든 프로젝트의 이미지·영상을 한곳에서 검색하고 셀렉하세요."
           canEdit={u.role !== "viewer"}
         />

@@ -68,7 +68,11 @@ export function SignupForm({ teams, allowSignup, domains }: { teams: Team[]; all
       <div className="flex flex-col gap-5">
         <BrandLockup className="lg:hidden" />
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">가입 신청</h2>
+          <p className="section-index flex items-center gap-2 uppercase">
+            <span className="h-px w-5 bg-accent" />
+            Join the crew
+          </p>
+          <h2 className="mt-2 text-[28px] font-semibold tracking-[-0.03em]">가입 신청</h2>
           <p className="mt-1.5 text-sm text-fg-3">신청하면 관리자가 확인 후 팀과 권한을 지정해 드려요.</p>
         </div>
       </div>

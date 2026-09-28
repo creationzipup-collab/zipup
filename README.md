@@ -1,6 +1,7 @@
 # ZIPUP AI
 
-CREATION ZIPUP 사내 AI 이미지·영상 생성 플랫폼입니다.
+CREATION ZIPUP의 사내 AI 이미지·영상 제작 스튜디오입니다.
+크리에이션 집업은 AI와 3D를 기반으로 한 영상 디렉터 집단이자 컨텐츠 그룹이고, 이 사이트는 그 촬영장처럼 만들었어요.
 Higgsfield API와 fal.ai를 한곳에 묶어, 가입 승인 → 팀별 권한·예산 → 생성 → 셀렉·공유까지 한 흐름으로 처리합니다.
 
 - **이미지**: Seedream 5.0 Pro · Nano Banana Pro · Nano Banana 2 · GPT Image 2.5 · GPT Image 2.0
@@ -78,6 +79,23 @@ Higgsfield API와 fal.ai를 한곳에 묶어, 가입 승인 → 팀별 권한·�
 | **fal.ai OpenRouter (기본)** | `FAL_KEY`만 있으면 자동 사용 | Gemini 2.5 Flash-Lite 기준 호출당 $0.001 미만 |
 | Google AI Studio 무료 키 | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` | 무료(한도 내). 무료 등급은 입력이 품질 개선에 쓰일 수 있음 |
 | OpenAI 호환 API (OpenRouter·Groq 등) | 위와 같음 | 모델별 |
+
+### 브랜드 · 모션
+
+사이트 전체가 "촬영장" 말투와 움직임을 써요. 공용 도구는 `src/components/brand/`에 있어요.
+
+| 어디 | 무엇 |
+|---|---|
+| 홈 | 늘 어두운 모니터 같은 히어로 — REC 표시·24fps 타임코드·씬(날짜)·오늘 테이크 번호, 이번 달 숫자(내 생성·스튜디오 전체·영상·작업한 사람), A·B·C 캠 바로가기, 필름 스트립처럼 흐르는 쇼릴, 매니페스토(Visual · Mix · Beyond · Authentic) |
+| 로그인·가입 | 레터박스 · 뷰파인더 · 3D 바닥 그리드 · 빛샘이 떠다니는 카메라 모니터 화면 |
+| 페이지 제목 | ARCHIVE · PRODUCTIONS · PIPELINES · SCRIPTS 같은 모노 라벨 + 영문 세리프 한 줄 |
+| 전환·상태 | 페이지가 바뀔 때 셔터 라인, 로딩은 필름 리더 카운트다운, 오류는 "NG 테이크", 없는 주소는 "Cut." |
+| 스튜디오 | 결과가 없을 때 이름이 적힌 슬레이트(클래퍼보드)가 "딱" 닫혀요 |
+
+- 영문 강조 서체는 Instrument Serif(SIL OFL, `src/app/fonts/`)를 로컬 파일로 넣어 빌드가 외부 폰트 서버에 기대지 않아요.
+- 운영체제의 "동작 줄이기"를 켜면 떠다니는 빛·그레인·띠·카운트다운이 멈춰요.
+- 필름 그레인은 장식 패널에만 써요. 결과물 이미지 위에는 절대 올리지 않아 화질 판단을 방해하지 않아요.
+- 쇼릴은 작은 썸네일(webp)이 있는 이미지만 흘려요. 영상 원본은 받지 않아 저장소 전송량이 거의 늘지 않아요.
 
 ## 로컬에서 실행하기
 

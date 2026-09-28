@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import * as React from "react";
 
 import { MediaThumb } from "@/components/assets/media";
+import { trackSpotlight } from "@/components/brand/motion";
+import { PageTitle } from "@/components/brand/page-title";
 import { ProjectFormDialog } from "@/components/projects/project-dialogs";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/controls";
@@ -48,11 +50,12 @@ export function ProjectsView({
 
   return (
     <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-[24px] font-semibold tracking-[-0.02em]">{archived ? "보관된 프로젝트" : "프로젝트"}</h1>
-          <p className="mt-1 text-sm text-fg-3">생성물·컬렉션·노드 캔버스를 프로젝트 단위로 묶어 팀과 공유해요.</p>
-        </div>
+      <PageTitle
+        label="Productions"
+        title={archived ? "보관된 프로젝트" : "프로젝트"}
+        accent={archived ? "That's a wrap." : "In production."}
+        subtitle="생성물·컬렉션·노드 캔버스를 프로젝트 단위로 묶어 팀과 공유해요."
+        actions={
         <div className="flex items-center gap-2">
           <Button variant="ghost" onClick={() => router.push(archived ? "/projects" : "/projects?archived=1")}>
             <Archive /> {archived ? "활성 프로젝트" : "보관함"}
@@ -63,7 +66,8 @@ export function ProjectsView({
             </Button>
           )}
         </div>
-      </div>
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[240px] flex-1 sm:max-w-sm">
@@ -102,7 +106,8 @@ export function ProjectsView({
               <Link
                 key={p.id}
                 href={`/projects/${p.id}`}
-                className="group flex flex-col overflow-hidden rounded-2xl border border-line bg-panel transition hover:-translate-y-0.5 hover:border-line-2 hover:shadow-[var(--shadow-soft)]"
+                onPointerMove={trackSpotlight}
+                className="spotlight group flex flex-col overflow-hidden rounded-2xl border border-line bg-panel transition duration-300 hover:-translate-y-0.5 hover:border-line-2 hover:shadow-[var(--shadow-soft)]"
               >
                 <div className="relative aspect-[16/9] overflow-hidden bg-panel-2">
                   {p.cover ? (

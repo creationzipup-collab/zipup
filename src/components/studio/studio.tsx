@@ -86,7 +86,7 @@ export function Studio({
   projects: EditableProject[];
   prefill: StudioPrefill;
 }) {
-  const { budget } = useShell();
+  const { budget, user: me } = useShell();
   const router = useRouter();
   const models: ModelDef[] = kind === "image" ? IMAGE_MODELS : VIDEO_MODELS;
   const qc = useQueryClient();
@@ -579,7 +579,10 @@ export function Studio({
             <div className="flex min-w-0 flex-col gap-4">
               {/* 머리글 */}
               <div className="flex items-center gap-2">
-                <span className="eyebrow">{kind === "image" ? "Image Studio" : "Video Studio"}</span>
+                <span className="eyebrow flex items-center gap-2">
+                  <span className="size-1.5 rounded-full" style={{ background: kind === "image" ? "#ff5b24" : "#5b4bff" }} />
+                  {kind === "image" ? "A Cam · Image Studio" : "B Cam · Video Studio"}
+                </span>
                 <ProviderTag status={st} />
                 <div className="ml-auto flex items-center gap-1">
                   <Tip content="프롬프트 라이브러리">
@@ -764,6 +767,7 @@ export function Studio({
             onReuse={reuse}
             onFinalize={(id) => setFinalizeId(id)}
             onUseAsReference={addReference}
+            director={me.name}
           />
         </section>
       )}

@@ -19,6 +19,7 @@ import { toast } from "sonner";
 
 import { aspectFrom, MediaThumb } from "@/components/assets/media";
 import { StarRating } from "@/components/assets/selection-controls";
+import { Slate } from "@/components/brand/slate";
 import type { LightboxItem } from "@/components/assets/lightbox";
 import { ModelSwatch, type ModelStatus } from "@/components/studio/model-picker";
 import type { RefAsset } from "@/components/studio/reference-slots";
@@ -66,6 +67,7 @@ export function ResultsFeed({
   onFinalize,
   onUseAsReference,
   view = "batches",
+  director,
 }: {
   kind: "image" | "video";
   generations: GenerationDTO[];
@@ -79,6 +81,8 @@ export function ResultsFeed({
   onUseAsReference: (item: RefAsset) => void;
   /** batches: 요청별 묶음 · gallery: 큰 화면용 모자이크 */
   view?: "batches" | "gallery";
+  /** 빈 화면 슬레이트에 적을 이름 */
+  director?: string | null;
 }) {
   const batches = React.useMemo(() => groupBatches(generations), [generations]);
   const allOutputs = React.useMemo(() => generations.flatMap((g) => g.outputs.map(toLightbox)), [generations]);
@@ -113,9 +117,10 @@ export function ResultsFeed({
 
   if (!batches.length) {
     return (
-      <div className="flex h-full min-h-[60vh] items-center justify-center">
+      <div className="flex h-full min-h-[60vh] flex-col items-center justify-center gap-2">
+        <Slate director={director} className="animate-fade-up" />
         <EmptyState
-          icon={kind === "image" ? <ImagePlus /> : <Clapperboard />}
+          className="pt-6"
           title={kind === "image" ? "첫 이미지를 만들어 보세요" : "첫 영상을 만들어 보세요"}
           description="왼쪽에서 모델과 프롬프트를 정하고 생성하기를 누르면 결과가 여기에 쌓여요. 이미지를 드래그하거나 붙여넣으면 레퍼런스로 들어가요."
         />

@@ -30,6 +30,7 @@ import { AssetTile } from "@/components/assets/asset-tile";
 import { CollectionDialog, CompareDialog, MoveDialog, TagDialog } from "@/components/assets/bulk-dialogs";
 import { Lightbox } from "@/components/assets/lightbox";
 import { selectionKeyAction } from "@/components/assets/selection-controls";
+import { PageTitle } from "@/components/brand/page-title";
 import { FinalizeDialog } from "@/components/studio/results-feed";
 import { Button } from "@/components/ui/button";
 import { Segmented, Select } from "@/components/ui/controls";
@@ -80,6 +81,8 @@ export function AssetBrowser({
   collectionId,
   canEdit = true,
   title,
+  label,
+  accent,
   subtitle,
   actions,
   hideScope,
@@ -88,6 +91,9 @@ export function AssetBrowser({
   collectionId?: string;
   canEdit?: boolean;
   title?: React.ReactNode;
+  /** 제목 위 모노 라벨·옆 세리프 한 줄 (페이지 제목으로 쓸 때) */
+  label?: string;
+  accent?: string;
   subtitle?: React.ReactNode;
   actions?: React.ReactNode;
   hideScope?: boolean;
@@ -305,14 +311,18 @@ export function AssetBrowser({
 
   return (
     <div className="flex flex-col gap-4">
-      {(title || actions) && (
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            {title && <h1 className="text-[24px] font-semibold tracking-[-0.02em]">{title}</h1>}
-            {subtitle && <p className="mt-1 text-sm text-fg-3">{subtitle}</p>}
+      {title && label ? (
+        <PageTitle label={label} title={title} accent={accent} subtitle={subtitle} actions={actions} />
+      ) : (
+        (title || actions) && (
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              {title && <h1 className="text-[24px] font-semibold tracking-[-0.02em]">{title}</h1>}
+              {subtitle && <p className="mt-1 text-sm text-fg-3">{subtitle}</p>}
+            </div>
+            {actions}
           </div>
-          {actions}
-        </div>
+        )
       )}
 
       {/* 검색 */}
