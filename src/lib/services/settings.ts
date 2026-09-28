@@ -64,6 +64,8 @@ export type ModelConfig = {
   enabled: boolean;
   priceOverrides: Record<string, number>;
   notes: string | null;
+  /** 공급자 고정 (null = 자동) */
+  provider: "higgsfield" | "fal" | null;
 };
 
 let modelCache: { at: number; value: Record<string, ModelConfig> } | null = null;
@@ -72,23 +74,23 @@ export async function getModelConfigs(): Promise<Record<string, ModelConfig>> {
   if (modelCache && Date.now() - modelCache.at < TTL) return modelCache.value;
   const rows = await db.select().from(modelSettings);
   const out: Record<string, ModelConfig> = {};
-  for (const m of MODELS) out[m.id] = { enabled: true, priceOverrides: {}, notes: null };
+  for (const m of MODELS) out[m.id] = { enabled: true, priceOverrides: {}, notes: null, provider: null };
   for (const r of rows) {
-    out[r.modelId] = { enabled: r.enabled, priceOverrides: r.priceOverrides ?? {}, notes: r.notes };
+    out[r.modelId] = { enabled: r.enabled, priceOverrides: r.priceOverrides ?? {}, notes: r.notes, provider: r.provider ?? null };
   }
   modelCache = { at: Date.now(), value: out };
   return out;
 }
 
 export async function updateModelConfig(modelId: string, patch: Partial<ModelConfig>, userId: string) {
-  const current = (await getModelConfigs())[modelId] ?? { enabled: true, priceOverrides: {}, notes: null };
-  const next = { ...current, ...patch };
+  const current = (await getModelConfigs())[modelId] ?? { enabled: true, priceOverrides: {}, notes: null, provider: null };
+  const next = { ...current, ...Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) } as ModelConfig;
   await db
     .insert(modelSettings)
-    .values({ modelId, enabled: next.enabled, priceOverrides: next.priceOverrides, notes: next.notes, updatedBy: userId })
+    .values({ modelId, enabled: next.enabled, priceOverrides: next.priceOverrides, notes: next.notes, provider: next.provider, updatedBy: userId })
     .onConflictDoUpdate({
       target: modelSettings.modelId,
-      set: { enabled: next.enabled, priceOverrides: next.priceOverrides, notes: next.notes, updatedBy: userId },
+      set: { enabled: next.enabled, priceOverrides: next.priceOverrides, notes: next.notes, provider: next.provider, updatedBy: userId },
     });
   modelCache = null;
 }

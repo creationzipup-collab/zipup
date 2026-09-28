@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 import { type AdminModelItem, ModelsAdmin } from "@/components/admin/models-admin";
-import { MODELS } from "@/lib/models/registry";
-import { resolveProvider } from "@/lib/providers";
+import { modelProviders, MODELS } from "@/lib/models/registry";
+import { isProviderConfigured, resolveProvider } from "@/lib/providers";
 import { modelUsageThisMonth } from "@/lib/services/admin";
 import { getModelConfigs } from "@/lib/services/settings";
 
@@ -22,8 +22,10 @@ export default async function AdminModelsPage() {
     prices: m.prices,
     priceNote: m.priceNote ?? null,
     supportsDraft: !!m.supportsDraft,
-    resolved: resolveProvider(m),
-    config: configs[m.id] ?? { enabled: true, priceOverrides: {}, notes: null },
+    resolved: resolveProvider(m, { preferred: configs[m.id]?.provider ?? null }),
+    draftResolved: m.supportsDraft ? resolveProvider(m, { preferred: configs[m.id]?.provider ?? null, params: { draft: true } }) : null,
+    providers: modelProviders(m).map((p) => ({ id: p, configured: isProviderConfigured(p) })),
+    config: configs[m.id] ?? { enabled: true, priceOverrides: {}, notes: null, provider: null },
     usage: usage[m.id] ?? { count: 0, spend: 0, failed: 0 },
   }));
   return <ModelsAdmin items={items} />;

@@ -36,12 +36,13 @@ export const mock: Provider = {
       ratio,
       outcome,
       Math.random().toString(36).slice(2, 8),
+      body.draft === true ? "d1" : "d0",
     ].join("_");
     return { requestId: id, status: "queued", raw: { mock: true } };
   },
 
   async poll(ref: RequestRef): Promise<PollResult> {
-    const [, kind, n, start, dur, ratio, outcome, rand] = ref.requestId.split("_");
+    const [, kind, n, start, dur, ratio, outcome, rand, draft] = ref.requestId.split("_");
     const elapsed = Date.now() - Number(start);
     if (elapsed < 1200) return { status: "queued", raw: { elapsed } };
     if (elapsed < Number(dur)) return { status: "in_progress", raw: { elapsed } };
@@ -52,6 +53,7 @@ export const mock: Provider = {
       return {
         status: "completed",
         outputs: [{ url: `mock://video?ratio=${encodeURIComponent(r)}&seed=${rand}`, contentType: "video/mp4" }],
+        meta: { seed: parseInt(rand, 36) % 2_147_483_647, ...(draft === "d1" ? { draftId: `mockdraft_${rand}` } : {}) },
         raw: {},
       };
     }

@@ -9,9 +9,9 @@ import { assets, generations, projectMembers, projects, user } from "@/lib/db/sc
 import { env } from "@/lib/env";
 import { badRequest, forbidden, HttpError } from "@/lib/errors";
 import { downloadOutput } from "@/lib/media/process";
-import { getModel, sanitizeParams } from "@/lib/models/registry";
+import { buildRequest, getModel, sanitizeParams, SEEDANCE_COMPLETE_ENDPOINT, SEEDANCE_DRAFT_TTL_DAYS, seedanceCompleteUsd } from "@/lib/models/registry";
 import { microsToUsd, usdToMicros } from "@/lib/money";
-import { getProvider, resolveProvider } from "@/lib/providers";
+import { getProvider, isProviderConfigured, resolveProvider } from "@/lib/providers";
 import { ProviderError, type PollResult, type ProviderOutput } from "@/lib/providers/types";
 import { canGenerate, type CurrentUser } from "@/lib/session";
 import { atLeast, computeAccess, ensurePersonalProject, requireProject } from "@/lib/services/access";
@@ -79,11 +79,10 @@ export async function createGeneration(u: CurrentUser, input: CreateGenerationIn
   const configs = await getModelConfigs();
   const config = configs[model.id];
   if (config && !config.enabled) throw badRequest(`${model.name}은(는) 관리자가 비활성화한 모델이에요.`);
-  const providerId = resolveProvider(model);
+  const params = sanitizeParams(model, input.params ?? {});
+  const providerId = resolveProvider(model, { preferred: config?.provider ?? null, params });
   if (!providerId) {
-    throw badRequest(
-      `${model.provider === "higgsfield" ? "Higgsfield" : "fal.ai"} API 키가 설정되지 않아 ${model.name}을(를) 쓸 수 없어요. 관리자에게 문의하세요.`,
-    );
+    throw badRequest(`API 키가 설정되지 않아 ${model.name}을(를) 쓸 수 없어요. 관리자에게 문의하세요.`);
   }
 
   // 저장할 프로젝트
@@ -91,7 +90,6 @@ export async function createGeneration(u: CurrentUser, input: CreateGenerationIn
     ? (await requireProject(u, input.projectId, "editor")).project
     : await ensurePersonalProject(u);
 
-  const params = sanitizeParams(model, input.params ?? {});
   const prompt = (input.prompt ?? "").trim().slice(0, 7000);
   const inputs: GenerationInputs = input.inputs ?? {};
   const slots = model.inputsFor(params);
@@ -143,7 +141,7 @@ export async function createGeneration(u: CurrentUser, input: CreateGenerationIn
   const prices = config?.priceOverrides ?? {};
   const now = new Date();
   const inputVideoSeconds = videos[0]?.durationSec ?? 0;
-  const built = perRequest.map((n) => model.build({ prompt, params, urls, count: n }));
+  const built = perRequest.map((n) => buildRequest(model, providerId, { prompt, params, urls, count: n }));
 
   // 비용 견적: Higgsfield는 견적 API, 실패 시 로컬 단가표
   let liveUsd: number | null = null;
@@ -152,7 +150,7 @@ export async function createGeneration(u: CurrentUser, input: CreateGenerationIn
   }
   const estimates = perRequest.map((n) => {
     const local = model.estimate(
-      { params, count: n, refImages: images.length, hasStartFrame: !!startFrame, refVideos: videos.length, inputVideoSeconds, now },
+      { params, count: n, refImages: images.length, hasStartFrame: !!startFrame, refVideos: videos.length, inputVideoSeconds, now, provider: providerId },
       prices,
     );
     return usdToMicros(liveUsd ?? local);
@@ -160,6 +158,7 @@ export async function createGeneration(u: CurrentUser, input: CreateGenerationIn
   const totalMicros = estimates.reduce((a, b) => a + b, 0);
 
   const batchId = randomUUID();
+  // 공식 드래프트(완성 가능)는 드래프트 지원 공급자에서만
   const isDraft = !!model.supportsDraft && params.draft === true;
 
   const rows = await db.transaction(async (tx) => {
@@ -196,6 +195,69 @@ export async function createGeneration(u: CurrentUser, input: CreateGenerationIn
   await db.update(projects).set({ lastActivityAt: new Date() }).where(eq(projects.id, project.id));
   void checkBudgetWarning(u, totalMicros).catch(() => {});
   return { batchId, projectId: project.id, generations: rows };
+}
+
+/** 드래프트가 완성 가능한 상태인지 (공식 드래프트 ID + 7일 이내) */
+export function draftCompletable(gen: Pick<GenerationRow, "isDraft" | "draftId" | "draftExpiresAt" | "status">, now = new Date()): boolean {
+  return gen.isDraft && gen.status === "completed" && !!gen.draftId && (!gen.draftExpiresAt || gen.draftExpiresAt > now);
+}
+
+/**
+ * Seedance 드래프트 → 같은 테이크 그대로 1080p 완성 (공식 draft/complete API)
+ * 프롬프트·레퍼런스·길이·비율·오디오 설정은 드래프트 ID에 묶여 있어 다시 보내지 않아요.
+ */
+export async function completeDraft(u: CurrentUser, draft: GenerationRow) {
+  if (!canGenerate(u)) throw forbidden("뷰어 권한은 생성할 수 없어요.");
+  const model = getModel(draft.modelId);
+  if (!model?.supportsDraft) throw badRequest("드래프트를 지원하지 않는 모델이에요.");
+  if (!draft.isDraft || draft.status !== "completed") throw badRequest("완료된 드래프트만 완성할 수 있어요.");
+  if (!draft.draftId) throw badRequest("이 드래프트에는 완성용 드래프트 ID가 없어요. (fal.ai로 만든 드래프트만 완성할 수 있어요)");
+  if (draft.draftExpiresAt && draft.draftExpiresAt <= new Date()) throw badRequest("드래프트 완성 기간(7일)이 지났어요. 같은 설정으로 새로 생성해 주세요.");
+  if (draft.provider !== "mock" && !isProviderConfigured(draft.provider as "higgsfield" | "fal")) {
+    throw badRequest("드래프트를 만든 공급자의 API 키가 없어 완성할 수 없어요.");
+  }
+
+  const configs = await getModelConfigs();
+  const prices = configs[model.id]?.priceOverrides ?? {};
+  const [firstVideo] = await db
+    .select({ durationSec: assets.durationSec })
+    .from(assets)
+    .where(and(eq(assets.generationId, draft.id), eq(assets.kind, "video")))
+    .limit(1);
+  const seconds = Math.max(4, Math.round(firstVideo?.durationSec ?? Number(draft.params.duration ?? 5)));
+  const estimated = usdToMicros(seedanceCompleteUsd(seconds, prices));
+
+  const [row] = await db.transaction(async (tx) => {
+    await assertBudget(tx, u, estimated);
+    return tx
+      .insert(generations)
+      .values({
+        batchId: randomUUID(),
+        projectId: draft.projectId,
+        userId: u.id,
+        teamId: u.teamId,
+        modelId: draft.modelId,
+        provider: draft.provider,
+        endpoint: SEEDANCE_COMPLETE_ENDPOINT,
+        kind: "video",
+        workflow: "draft-complete",
+        status: "pending",
+        prompt: draft.prompt,
+        params: { ...draft.params, draft: false, resolution: "1080p" },
+        inputs: draft.inputs,
+        requestBody: { draft_id: draft.draftId, resolution: "1080p" },
+        estimatedCostMicros: estimated,
+        expectedOutputs: 1,
+        isDraft: false,
+        parentGenerationId: draft.id,
+        canvasId: draft.canvasId,
+        canvasNodeId: draft.canvasNodeId,
+      })
+      .returning();
+  });
+  await db.update(projects).set({ lastActivityAt: new Date() }).where(eq(projects.id, draft.projectId));
+  void checkBudgetWarning(u, estimated).catch(() => {});
+  return { batchId: row.batchId, projectId: row.projectId, generations: [row] };
 }
 
 /** 예산 경고: 이번 요청으로 경고 기준(%)을 막 넘었을 때만 알림 */
@@ -418,6 +480,11 @@ async function finalize(gen: GenerationRow, res: PollResult) {
       status: "finalizing",
       providerPayload: { outputs, costUsd: res.costUsd ?? null, raw: res.raw },
       lastPolledAt: new Date(),
+      // 공식 드래프트: 같은 테이크를 완성할 수 있는 ID (7일 유효)
+      ...(res.meta?.draftId
+        ? { draftId: res.meta.draftId, draftExpiresAt: new Date(Date.now() + SEEDANCE_DRAFT_TTL_DAYS * 86400_000) }
+        : {}),
+      ...(typeof res.meta?.seed === "number" ? { seed: res.meta.seed } : {}),
     })
     .where(and(eq(generations.id, gen.id), inArray(generations.status, ["queued", "in_progress"])))
     .returning();
@@ -627,6 +694,9 @@ export type GenerationDTO = {
   costMicros: number | null;
   expectedOutputs: number;
   isDraft: boolean;
+  /** 공식 드래프트 완성 가능 여부 (드래프트 ID 있음 + 기간 안) */
+  draftCompletable: boolean;
+  draftExpiresAt: string | null;
   parentGenerationId: string | null;
   canvasNodeId: string | null;
   createdAt: string;
@@ -670,6 +740,8 @@ export async function toGenerationDTOs(rows: GenerationRow[]): Promise<Generatio
     costMicros: g.costMicros,
     expectedOutputs: g.expectedOutputs,
     isDraft: g.isDraft,
+    draftCompletable: draftCompletable(g),
+    draftExpiresAt: g.draftExpiresAt?.toISOString() ?? null,
     parentGenerationId: g.parentGenerationId,
     canvasNodeId: g.canvasNodeId,
     createdAt: g.createdAt.toISOString(),

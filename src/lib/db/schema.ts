@@ -222,6 +222,11 @@ export const generations = pgTable(
     expectedOutputs: integer().notNull().default(1),
     outputCount: integer().notNull().default(0),
     isDraft: boolean().notNull().default(false),
+    /** Seedance 드래프트 ID (같은 테이크를 1080p로 완성할 때 사용, 7일 유효) */
+    draftId: text(),
+    draftExpiresAt: timestamp({ withTimezone: true }),
+    /** 공급자가 사용한 시드 (재현용) */
+    seed: bigint({ mode: "number" }),
     parentGenerationId: uuid(),
     canvasId: uuid(),
     canvasNodeId: text(),
@@ -423,9 +428,59 @@ export const promptPresets = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     teamId: uuid().references(() => teams.id, { onDelete: "set null" }),
     useCount: integer().notNull().default(0),
+    /** 최신 버전 번호 (prompt 컬럼은 항상 최신 버전 내용) */
+    latestVersion: integer().notNull().default(1),
     ...timestamps,
   },
   (t) => [index().on(t.userId), index().on(t.teamId)],
+);
+
+/** 프롬프트 버전 기록 (저장할 때마다 v1, v2 …) */
+export const promptVersions = pgTable(
+  "prompt_versions",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    presetId: uuid()
+      .notNull()
+      .references(() => promptPresets.id, { onDelete: "cascade" }),
+    version: integer().notNull(),
+    prompt: text().notNull(),
+    /** 이번 버전에서 바꾼 점 */
+    note: text(),
+    modelId: text(),
+    params: jsonb().$type<Record<string, unknown>>(),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("prompt_versions_preset_version_uq").on(t.presetId, t.version)],
+);
+
+/** 번역 캐시 (같은 문장을 다시 번역하지 않도록) */
+export const promptTranslations = pgTable("prompt_translations", {
+  /** sha256(방향 + 원문) */
+  hash: text().primaryKey(),
+  sourceLang: text().notNull(),
+  targetLang: text().notNull(),
+  source: text().notNull(),
+  /** [{ src, dst }] 구간별 대응 */
+  segments: jsonb().$type<{ src: string; dst: string }[]>().notNull(),
+  model: text(),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+});
+
+/** LLM 사용 기록 (번역·단어 추천 비용 확인용) */
+export const aiUsage = pgTable(
+  "ai_usage",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: text().references(() => user.id, { onDelete: "set null" }),
+    feature: text().notNull(),
+    model: text().notNull(),
+    costMicros: bigint({ mode: "number" }).notNull().default(0),
+    cached: boolean().notNull().default(false),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index().on(t.createdAt), index().on(t.userId)],
 );
 
 export const savedSearches = pgTable(
@@ -487,6 +542,8 @@ export const modelSettings = pgTable("model_settings", {
   /** 단가 덮어쓰기: { [priceKey]: USD } */
   priceOverrides: jsonb().$type<Record<string, number>>(),
   notes: text(),
+  /** 공급자 고정 (null = 자동: 기본 공급자 → 키가 있는 대체 공급자 순) */
+  provider: text().$type<"higgsfield" | "fal">(),
   updatedBy: text().references(() => user.id, { onDelete: "set null" }),
   updatedAt: timestamp({ withTimezone: true })
     .notNull()

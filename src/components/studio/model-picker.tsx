@@ -30,12 +30,12 @@ export function ModelSwatch({ model, className }: { model: Pick<ModelDef, "gradi
   );
 }
 
-export function ProviderTag({ status, model }: { status?: ModelStatus; model: ModelDef }) {
+export function ProviderTag({ status }: { status?: ModelStatus; model?: ModelDef }) {
   if (status && !status.enabled) return <span className="rounded bg-danger/12 px-1.5 py-0.5 text-[10px] text-danger">비활성</span>;
   if (!status?.provider) return <span className="rounded bg-danger/12 px-1.5 py-0.5 text-[10px] text-danger">키 필요</span>;
   if (status.provider === "mock") return <span className="rounded bg-warning/12 px-1.5 py-0.5 font-mono text-[10px] text-warning">MOCK</span>;
   return (
-    <span className="rounded bg-panel-3 px-1.5 py-0.5 text-[10px] text-fg-3">{model.provider === "higgsfield" ? "Higgsfield" : "fal.ai"}</span>
+    <span className="rounded bg-panel-3 px-1.5 py-0.5 text-[10px] text-fg-3">{status.provider === "higgsfield" ? "Higgsfield" : "fal.ai"}</span>
   );
 }
 

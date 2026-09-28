@@ -1,9 +1,11 @@
 import type {
   BuildContext,
+  BuiltRequest,
   EstimateContext,
   ModelDef,
   ParamOption,
   PriceItem,
+  ProviderKey,
 } from "./types";
 
 /* -------------------------------------------------------------------------- */
@@ -60,8 +62,9 @@ function price(prices: Record<string, number>, key: string, items: PriceItem[]):
   return items.find((p) => p.key === key)?.usd ?? 0;
 }
 
-/** 가격 프로모션: 해당 시각 이전이면 배수 적용 */
-function promo(now: Date, until: string, multiplier: number): number {
+/** 가격 프로모션: 해당 시각 이전이면 배수 적용 (Higgsfield 출시 할인 — 다른 공급자에는 적용 안 함) */
+function promo(now: Date, until: string, multiplier: number, provider?: string): number {
+  if (provider && provider !== "higgsfield") return 1;
   return now.getTime() < new Date(until).getTime() ? multiplier : 1;
 }
 
@@ -71,6 +74,27 @@ export function sizeForRatio(ratio: string, area: number): { width: number; heig
   if (!rw || !rh) return { width: Math.round(Math.sqrt(area)), height: Math.round(Math.sqrt(area)) };
   const width = Math.floor(Math.sqrt((area * rw) / rh) / 16) * 16;
   const height = Math.floor(Math.sqrt((area * rh) / rw) / 16) * 16;
+  return { width, height };
+}
+
+/**
+ * fal GPT Image 크기: 16의 배수, 긴 변 ≤ 3840, 비율 ≤ 3:1, 총 픽셀 655,360 ~ 8,294,400
+ * res: 1k / 2k / 4k (목표 면적)
+ */
+export function gptImageSize(ratio: string, res: string): { width: number; height: number } | "auto" {
+  if (ratio === "auto") return "auto";
+  const area = res === "4k" ? 8_294_400 : res === "1k" ? 1024 * 1024 : 2048 * 2048;
+  let { width, height } = sizeForRatio(ratio, area);
+  const longest = Math.max(width, height);
+  if (longest > 3840) {
+    const k = 3840 / longest;
+    width = Math.floor((width * k) / 16) * 16;
+    height = Math.floor((height * k) / 16) * 16;
+  }
+  while (width * height < 655_360) {
+    width += 16;
+    height = Math.round((width * height) / (width - 16) / 16) * 16;
+  }
   return { width, height };
 }
 
@@ -402,7 +426,7 @@ const gptImage25: ModelDef = {
   inputsFor: () => ({ images: { max: 16, label: "레퍼런스 / 편집 이미지", hint: "넣으면 편집 모드" } }),
   count: { max: 4, native: false },
   prices: GPT25_PRICES,
-  priceNote: "토큰 기반 과금 — 제출 전 Higgsfield 견적 API로 정확히 계산해요.",
+  priceNote: "토큰 기반 과금 — Higgsfield로 보낼 때는 견적 API로, fal.ai로 보낼 때는 단가표로 계산해요.",
   build: (ctx) => {
     const variant = str(ctx.params.variant, "flare") === "sunburst" ? "sunburst" : "flare";
     const body: Record<string, unknown> = {
@@ -419,6 +443,27 @@ const gptImage25: ModelDef = {
       body,
       expectedOutputs: 1,
     };
+  },
+  altBuilds: {
+    fal: (ctx) => {
+      const variant = str(ctx.params.variant, "flare") === "sunburst" ? "sunburst" : "flare";
+      const edit = ctx.urls.images.length > 0;
+      const size = gptImageSize(str(ctx.params.aspectRatio, "1:1"), str(ctx.params.resolution, "2k"));
+      const body: Record<string, unknown> = {
+        prompt: ctx.prompt,
+        quality: str(ctx.params.quality, "high"),
+        image_size: size,
+        num_images: 1,
+        output_format: "png",
+      };
+      if (edit) body.image_urls = ctx.urls.images.slice(0, 16);
+      return {
+        endpoint: `openai/gpt-image-2.5/${variant}/${edit ? "edit" : "text-to-image"}`,
+        workflow: edit ? "edit" : "text-to-image",
+        body,
+        expectedOutputs: 1,
+      };
+    },
   },
   estimate: (ctx, prices) => {
     const q = str(ctx.params.quality, "high");
@@ -485,7 +530,7 @@ const gptImage2: ModelDef = {
   inputsFor: () => ({ images: { max: 16, label: "레퍼런스 / 편집 이미지" } }),
   count: { max: 4, native: false },
   prices: GPT2_PRICES,
-  priceNote: "토큰 기반 과금 — 제출 전 Higgsfield 견적 API로 정확히 계산해요.",
+  priceNote: "토큰 기반 과금 — Higgsfield로 보낼 때는 견적 API로, fal.ai로 보낼 때는 단가표로 계산해요.",
   build: (ctx) => {
     const body: Record<string, unknown> = {
       prompt: ctx.prompt,
@@ -501,6 +546,20 @@ const gptImage2: ModelDef = {
       body,
       expectedOutputs: 1,
     };
+  },
+  altBuilds: {
+    fal: (ctx) => {
+      const edit = ctx.urls.images.length > 0;
+      const body: Record<string, unknown> = {
+        prompt: ctx.prompt,
+        quality: str(ctx.params.quality, "high"),
+        image_size: gptImageSize(str(ctx.params.aspectRatio, "1:1"), str(ctx.params.resolution, "2k")),
+        num_images: 1,
+        output_format: "png",
+      };
+      if (edit) body.image_urls = ctx.urls.images.slice(0, 16);
+      return { endpoint: edit ? "openai/gpt-image-2/edit" : "openai/gpt-image-2", workflow: edit ? "edit" : "text-to-image", body, expectedOutputs: 1 };
+    },
   },
   estimate: (ctx, prices) => {
     const q = str(ctx.params.quality, "high");
@@ -564,7 +623,7 @@ const minimaxH3: ModelDef = {
   }),
   count: { max: 4, native: false },
   prices: H3_PRICES,
-  priceNote: "2K 초당 $0.13 (10월 1일 전까지 30% 할인 $0.091)",
+  priceNote: "2K 초당 $0.13 (Higgsfield는 10월 1일 전까지 30% 할인)",
   build: (ctx) => {
     const duration = Math.min(15, Math.max(5, Math.round(num(ctx.params.duration, 5))));
     const aspect = str(ctx.params.aspectRatio, "16:9");
@@ -589,9 +648,35 @@ const minimaxH3: ModelDef = {
     }
     return { endpoint: "minimax/h3/text-to-video", workflow: "text-to-video", body: base, expectedOutputs: 1 };
   },
+  altBuilds: {
+    fal: (ctx) => {
+      const duration = Math.min(15, Math.max(5, Math.round(num(ctx.params.duration, 5))));
+      const aspect = str(ctx.params.aspectRatio, "16:9");
+      const base: Record<string, unknown> = { prompt: ctx.prompt, duration, resolution: "2K", prompt_expansion_mode: "disabled" };
+      if (ctx.urls.startFrame || ctx.urls.endFrame) {
+        const body: Record<string, unknown> = { ...base };
+        if (ctx.urls.startFrame) body.image_url = ctx.urls.startFrame;
+        if (ctx.urls.endFrame) body.end_image_url = ctx.urls.endFrame;
+        return { endpoint: "minimax/h3/image-to-video", workflow: "image-to-video", body, expectedOutputs: 1 };
+      }
+      if (ctx.urls.images.length || ctx.urls.videos.length || ctx.urls.audios.length) {
+        const body: Record<string, unknown> = { ...base, aspect_ratio: aspect === "adaptive" ? "adaptive" : aspect };
+        if (ctx.urls.images.length) body.reference_image_urls = ctx.urls.images.slice(0, 9);
+        if (ctx.urls.videos.length) body.reference_video_urls = ctx.urls.videos.slice(0, 3);
+        if (ctx.urls.audios.length) body.reference_audio_urls = ctx.urls.audios.slice(0, 3);
+        return { endpoint: "minimax/h3/reference-to-video", workflow: "reference-to-video", body, expectedOutputs: 1 };
+      }
+      return {
+        endpoint: "minimax/h3/text-to-video",
+        workflow: "text-to-video",
+        body: { ...base, aspect_ratio: aspect === "adaptive" ? "16:9" : aspect },
+        expectedOutputs: 1,
+      };
+    },
+  },
   estimate: (ctx, prices) => {
     const duration = Math.min(15, Math.max(5, Math.round(num(ctx.params.duration, 5))));
-    const m = promo(ctx.now, PROMO_UNTIL, price(prices, "promoMultiplier", H3_PRICES));
+    const m = promo(ctx.now, PROMO_UNTIL, price(prices, "promoMultiplier", H3_PRICES), ctx.provider);
     return duration * price(prices, "perSecond", H3_PRICES) * m;
   },
   validate: ({ prompt, hasStartFrame, refImages, refVideos, refAudios }) => {
@@ -604,15 +689,30 @@ const minimaxH3: ModelDef = {
 };
 
 const SEEDANCE_PRICES: PriceItem[] = [
-  { key: "per1kTokens", label: "영상 토큰 1,000개당", usd: 0.0214, unit: "1k tokens" },
-  { key: "promoMultiplier", label: "10/1 이전 할인 배수", usd: 0.7, unit: "x" },
+  { key: "per1kTokens", label: "480p·720p 토큰 1,000개당", usd: 0.0214, unit: "1k tokens" },
+  { key: "per1kTokens1080", label: "1080p 토큰 1,000개당", usd: 0.0234, unit: "1k tokens" },
+  { key: "promoMultiplier", label: "Higgsfield 10/1 이전 할인 배수", usd: 0.7, unit: "x" },
 ];
 /** Seedance 해상도별 픽셀 수 (16:9 기준) */
-const SEEDANCE_PIXELS: Record<string, number> = { "480p": 854 * 480, "720p": 1280 * 720 };
+const SEEDANCE_PIXELS: Record<string, number> = { "480p": 854 * 480, "720p": 1280 * 720, "1080p": 1920 * 1080 };
 
+/** 과금 토큰 = 가로 × 세로 × (입력 영상 길이 + 생성 길이) × 24 / 1024 */
 export function seedanceTokens(resolution: string, seconds: number): number {
   const px = SEEDANCE_PIXELS[resolution] ?? SEEDANCE_PIXELS["720p"];
   return Math.ceil((px * seconds * 24) / 1024);
+}
+
+/** 드래프트를 같은 테이크 그대로 1080p로 완성하는 비용 (USD) */
+export function seedanceCompleteUsd(seconds: number, prices: Record<string, number> = {}): number {
+  return (seedanceTokens("1080p", seconds) / 1000) * price(prices, "per1kTokens1080", SEEDANCE_PRICES);
+}
+
+/** 드래프트 완성 가능 기간 (공식: 7일, 같은 계정) */
+export const SEEDANCE_DRAFT_TTL_DAYS = 7;
+export const SEEDANCE_COMPLETE_ENDPOINT = "bytedance/seedance-2.5/draft/complete";
+
+function seedanceDuration(params: Record<string, unknown>): number {
+  return Math.min(30, Math.max(4, Math.round(num(params.duration, 5))));
 }
 
 const seedance25: ModelDef = {
@@ -621,9 +721,11 @@ const seedance25: ModelDef = {
   shortName: "Seedance 2.5",
   vendor: "ByteDance",
   kind: "video",
-  provider: "higgsfield",
-  tagline: "최대 30초 · 멀티모달 레퍼런스 50개 · 편집·연장 · 드래프트 모드",
-  highlights: ["480p 드래프트로 싸게 여러 테이크", "고른 테이크만 720p 최종 렌더", "영상 편집·연장"],
+  // 공식 드래프트 모드(draft → draft/complete)는 fal.ai에서 지원
+  provider: "fal",
+  draftProviders: ["fal"],
+  tagline: "최대 30초 · 1080p · 멀티모달 레퍼런스 · 편집·연장 · 드래프트 모드",
+  highlights: ["480p 드래프트로 싸게 여러 테이크", "고른 테이크를 그대로 1080p로 완성", "영상 편집·연장"],
   badge: "DRAFT",
   gradient: "linear-gradient(135deg,#050b1f 0%,#2b59ff 50%,#9fe0ff 100%)",
   supportsDraft: true,
@@ -645,7 +747,7 @@ const seedance25: ModelDef = {
       label: "드래프트 모드",
       type: "boolean",
       default: false,
-      hint: "480p로 저렴하게 미리보고, 마음에 드는 테이크만 720p로 최종 렌더",
+      hint: "480p로 빠르고 싸게 미리보고, 마음에 드는 테이크만 그대로 1080p로 완성 (7일 이내)",
     },
     {
       key: "aspectRatio",
@@ -665,6 +767,7 @@ const seedance25: ModelDef = {
       options: [
         { value: "480p", label: "480p" },
         { value: "720p", label: "720p" },
+        { value: "1080p", label: "1080p" },
       ],
       hidden: (p) => p.draft === true,
     },
@@ -717,31 +820,31 @@ const seedance25: ModelDef = {
   },
   count: { max: 4, native: false },
   prices: SEEDANCE_PRICES,
-  priceNote: "초당 480p 약 $0.21 · 720p 약 $0.46 (10월 1일 전까지 30% 할인)",
+  priceNote: "초당 480p 약 $0.22 · 720p 약 $0.47 · 1080p 약 $1.16 — 드래프트로 고른 테이크만 1080p로 완성하면 크게 절약돼요",
+  // fal.ai (기본): 공식 드래프트 지원. 편집·연장은 reference-to-video의 task로 처리
   build: (ctx) => {
     const task = str(ctx.params.task, "generate");
     const draft = bool(ctx.params.draft, false);
     const resolution = draft ? "480p" : str(ctx.params.resolution, "720p");
-    const bitrate = draft ? "standard" : str(ctx.params.bitrate, "high");
-    const duration = Math.min(30, Math.max(4, Math.round(num(ctx.params.duration, 5))));
+    const duration = String(seedanceDuration(ctx.params));
     const common: Record<string, unknown> = {
       prompt: ctx.prompt,
       resolution,
-      bitrate_mode: bitrate,
+      bitrate_mode: draft ? "standard" : str(ctx.params.bitrate, "high"),
       generate_audio: bool(ctx.params.audio, true),
     };
-    const refs = (body: Record<string, unknown>, skipFirstVideo: boolean) => {
+    if (draft) common.draft = true;
+    const refs = (body: Record<string, unknown>, includeVideos: boolean) => {
       if (ctx.urls.images.length) body.image_urls = ctx.urls.images.slice(0, 30);
-      const vids = skipFirstVideo ? ctx.urls.videos.slice(1) : ctx.urls.videos;
-      if (vids.length) body.video_urls = vids.slice(0, skipFirstVideo ? 9 : 10);
+      if (includeVideos && ctx.urls.videos.length) body.video_urls = ctx.urls.videos.slice(0, 10);
       if (ctx.urls.audios.length) body.audio_urls = ctx.urls.audios.slice(0, 10);
       return body;
     };
     if (task === "edit" || task === "extend") {
-      const body = refs({ ...common, video_url: ctx.urls.videos[0] }, true);
+      const body = refs({ ...common, task: task === "edit" ? "editing" : "extension" }, true);
       if (task === "extend") body.duration = duration;
       return {
-        endpoint: `bytedance/seedance-2.5/${task === "edit" ? "video-edit" : "video-extend"}`,
+        endpoint: "bytedance/seedance-2.5/reference-to-video",
         workflow: task === "edit" ? "video-edit" : "video-extend",
         body,
         expectedOutputs: 1,
@@ -750,33 +853,82 @@ const seedance25: ModelDef = {
     if (ctx.urls.startFrame) {
       const body: Record<string, unknown> = { ...common, duration, image_url: ctx.urls.startFrame };
       if (ctx.urls.endFrame) body.end_image_url = ctx.urls.endFrame;
-      if (!ctx.prompt.trim()) delete body.prompt;
       return { endpoint: "bytedance/seedance-2.5/image-to-video", workflow: "image-to-video", body, expectedOutputs: 1 };
     }
     const aspect = str(ctx.params.aspectRatio, "16:9");
     if (ctx.urls.images.length || ctx.urls.videos.length || ctx.urls.audios.length) {
-      const body = refs({ ...common, duration, aspect_ratio: aspect }, false);
+      const body = refs({ ...common, task: "reference", duration, aspect_ratio: aspect }, true);
       return { endpoint: "bytedance/seedance-2.5/reference-to-video", workflow: "reference-to-video", body, expectedOutputs: 1 };
     }
     return {
       endpoint: "bytedance/seedance-2.5/text-to-video",
       workflow: "text-to-video",
-      body: { ...common, duration, aspect_ratio: aspect, output_format: "mp4" },
+      body: { ...common, duration, aspect_ratio: aspect },
       expectedOutputs: 1,
     };
+  },
+  altBuilds: {
+    // Higgsfield: 드래프트 완성 API 없음 (드래프트 요청은 fal.ai로만 보냄)
+    higgsfield: (ctx) => {
+      const task = str(ctx.params.task, "generate");
+      const draft = bool(ctx.params.draft, false);
+      const resolution = draft ? "480p" : str(ctx.params.resolution, "720p");
+      const bitrate = draft ? "standard" : str(ctx.params.bitrate, "high");
+      const duration = seedanceDuration(ctx.params);
+      const common: Record<string, unknown> = {
+        prompt: ctx.prompt,
+        resolution,
+        bitrate_mode: bitrate,
+        generate_audio: bool(ctx.params.audio, true),
+      };
+      const refs = (body: Record<string, unknown>, skipFirstVideo: boolean) => {
+        if (ctx.urls.images.length) body.image_urls = ctx.urls.images.slice(0, 30);
+        const vids = skipFirstVideo ? ctx.urls.videos.slice(1) : ctx.urls.videos;
+        if (vids.length) body.video_urls = vids.slice(0, skipFirstVideo ? 9 : 10);
+        if (ctx.urls.audios.length) body.audio_urls = ctx.urls.audios.slice(0, 10);
+        return body;
+      };
+      if (task === "edit" || task === "extend") {
+        const body = refs({ ...common, video_url: ctx.urls.videos[0] }, true);
+        if (task === "extend") body.duration = duration;
+        return {
+          endpoint: `bytedance/seedance-2.5/${task === "edit" ? "video-edit" : "video-extend"}`,
+          workflow: task === "edit" ? "video-edit" : "video-extend",
+          body,
+          expectedOutputs: 1,
+        };
+      }
+      if (ctx.urls.startFrame) {
+        const body: Record<string, unknown> = { ...common, duration, image_url: ctx.urls.startFrame };
+        if (ctx.urls.endFrame) body.end_image_url = ctx.urls.endFrame;
+        if (!ctx.prompt.trim()) delete body.prompt;
+        return { endpoint: "bytedance/seedance-2.5/image-to-video", workflow: "image-to-video", body, expectedOutputs: 1 };
+      }
+      const aspect = str(ctx.params.aspectRatio, "16:9");
+      if (ctx.urls.images.length || ctx.urls.videos.length || ctx.urls.audios.length) {
+        const body = refs({ ...common, duration, aspect_ratio: aspect }, false);
+        return { endpoint: "bytedance/seedance-2.5/reference-to-video", workflow: "reference-to-video", body, expectedOutputs: 1 };
+      }
+      return {
+        endpoint: "bytedance/seedance-2.5/text-to-video",
+        workflow: "text-to-video",
+        body: { ...common, duration, aspect_ratio: aspect, output_format: "mp4" },
+        expectedOutputs: 1,
+      };
+    },
   },
   estimate: (ctx, prices) => {
     const task = str(ctx.params.task, "generate");
     const draft = bool(ctx.params.draft, false);
     const resolution = draft ? "480p" : str(ctx.params.resolution, "720p");
-    const duration = Math.min(30, Math.max(4, Math.round(num(ctx.params.duration, 5))));
+    const duration = seedanceDuration(ctx.params);
     // 과금 토큰 = 해상도 × (입력 영상 길이 + 생성 영상 길이)
     const source = Math.max(4, ctx.inputVideoSeconds || 5);
-    const billableSeconds =
-      task === "edit" ? source * 2 : task === "extend" ? source + duration : duration;
+    const billableSeconds = task === "edit" ? source * 2 : task === "extend" ? source + duration : duration;
     const tokens = seedanceTokens(resolution, billableSeconds);
-    const m = promo(ctx.now, PROMO_UNTIL, price(prices, "promoMultiplier", SEEDANCE_PRICES));
-    return (tokens / 1000) * price(prices, "per1kTokens", SEEDANCE_PRICES) * m;
+    const per = resolution === "1080p" ? price(prices, "per1kTokens1080", SEEDANCE_PRICES) : price(prices, "per1kTokens", SEEDANCE_PRICES);
+    const m = promo(ctx.now, PROMO_UNTIL, price(prices, "promoMultiplier", SEEDANCE_PRICES), ctx.provider);
+    return (tokens / 1000) * per * m;
   },
   validate: ({ prompt, params, hasStartFrame, refImages, refVideos }) => {
     const task = str(params.task, "generate");
@@ -810,6 +962,20 @@ export const MODEL_MAP: Record<string, ModelDef> = Object.fromEntries(MODELS.map
 
 export function getModel(id: string): ModelDef | undefined {
   return MODEL_MAP[id];
+}
+
+/** 모델이 지원하는 공급자 (기본 공급자 먼저) */
+export function modelProviders(model: ModelDef): ProviderKey[] {
+  return [model.provider, ...(Object.keys(model.altBuilds ?? {}) as ProviderKey[]).filter((p) => p !== model.provider)];
+}
+
+/** 공급자에 맞는 요청 생성 (모의 공급자는 기본 공급자 형식을 사용) */
+export function buildRequest(model: ModelDef, provider: ProviderKey | "mock", ctx: BuildContext): BuiltRequest {
+  if (provider !== "mock" && provider !== model.provider) {
+    const alt = model.altBuilds?.[provider];
+    if (alt) return alt(ctx);
+  }
+  return model.build(ctx);
 }
 
 export const IMAGE_MODELS = MODELS.filter((m) => m.kind === "image");

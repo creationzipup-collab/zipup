@@ -15,6 +15,13 @@
       "when": 1790568098951,
       "tag": "0001_milky_blacklash",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790570496763,
+      "tag": "0002_flashy_morg",
+      "breakpoints": true
     }
   ]
 }

@@ -16,12 +16,13 @@ const Body = z.object({
   enabled: z.boolean().optional(),
   priceOverrides: z.record(z.string(), z.number().min(0).max(1000)).optional(),
   notes: z.string().max(300).nullable().optional(),
+  provider: z.enum(["higgsfield", "fal"]).nullable().optional(),
 });
 
 export const PATCH = handle(async (req: Request) => {
   const admin = await apiAdmin();
   const b = Body.parse(await readJson(req));
-  await updateModelConfig(b.modelId, { enabled: b.enabled, priceOverrides: b.priceOverrides, notes: b.notes }, admin.id);
+  await updateModelConfig(b.modelId, { enabled: b.enabled, priceOverrides: b.priceOverrides, notes: b.notes, provider: b.provider }, admin.id);
   await audit(admin.id, "model.update", { type: "model", id: b.modelId }, b as Record<string, unknown>);
   return { ok: true };
 });

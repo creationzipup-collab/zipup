@@ -124,7 +124,9 @@ export const fal: Provider = {
       const nsfw = looksNsfw("", result.data);
       return { status: nsfw ? "nsfw" : "failed", error: nsfw ? undefined : "결과물이 비어 있어요.", raw: result.data };
     }
-    return { status: "completed", outputs, raw: result.data };
+    const draftId = typeof result.data.draft_id === "string" && result.data.draft_id ? result.data.draft_id : undefined;
+    const seed = typeof result.data.seed === "number" ? result.data.seed : undefined;
+    return { status: "completed", outputs, meta: { draftId, seed }, raw: result.data };
   },
 
   async cancel(ref: RequestRef): Promise<boolean> {

@@ -81,6 +81,8 @@ export type EstimateContext = {
   /** 편집·연장 시 입력 영상 길이(초) */
   inputVideoSeconds: number;
   now: Date;
+  /** 실제로 요청을 처리할 공급자 (공급자별 단가·프로모션 차이 반영) */
+  provider?: ProviderKey | "mock";
 };
 
 export type PriceItem = {
@@ -121,4 +123,8 @@ export type ModelDef = {
   /** 가격 안내 문구 */
   priceNote?: string;
   supportsDraft?: boolean;
+  /** 대체 공급자용 요청 생성 (기본 공급자 키가 없거나 관리자가 고정했을 때) */
+  altBuilds?: Partial<Record<ProviderKey, (ctx: BuildContext) => BuiltRequest>>;
+  /** 드래프트 요청을 처리할 수 있는 공급자 (공식 드래프트 → 완성 API 지원) */
+  draftProviders?: ProviderKey[];
 };

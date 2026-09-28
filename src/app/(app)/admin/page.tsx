@@ -23,8 +23,8 @@ export default async function AdminHome() {
     getSettings(),
   ]);
   const providers = [
-    { id: "higgsfield" as const, name: "Higgsfield API", models: "GPT Image 2.5·2 · MiniMax H3 · Seedance 2.5", configured: isProviderConfigured("higgsfield") },
-    { id: "fal" as const, name: "fal.ai", models: "Seedream 5.0 Pro · Nano Banana Pro · Nano Banana 2", configured: isProviderConfigured("fal") },
+    { id: "higgsfield" as const, name: "Higgsfield API", models: "GPT Image 2.5·2 · MiniMax H3 (기본) · Seedance 2.5 (대체)", configured: isProviderConfigured("higgsfield") },
+    { id: "fal" as const, name: "fal.ai", models: "Seedream · Nano Banana · Seedance 드래프트 (기본) · GPT·H3 (대체) · 번역 LLM", configured: isProviderConfigured("fal") },
   ];
   const inflight = (p: string) => queue.filter((q) => q.provider === p).reduce((s, q) => s + q.n, 0);
 

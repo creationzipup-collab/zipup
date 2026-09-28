@@ -13,7 +13,14 @@ import type { CurrentUser } from "@/lib/session";
 
 export type ModelStatusMap = Record<
   string,
-  { enabled: boolean; provider: "higgsfield" | "fal" | "mock" | null; priceOverrides: Record<string, number>; notes: string | null }
+  {
+    enabled: boolean;
+    provider: "higgsfield" | "fal" | "mock" | null;
+    priceOverrides: Record<string, number>;
+    notes: string | null;
+    /** 드래프트 요청이 갈 공급자 (드래프트 지원 모델만) */
+    draftProvider?: "higgsfield" | "fal" | "mock" | null;
+  }
 >;
 
 export async function getModelStatus(): Promise<ModelStatusMap> {
@@ -21,7 +28,13 @@ export async function getModelStatus(): Promise<ModelStatusMap> {
   const out: ModelStatusMap = {};
   for (const m of MODELS) {
     const c = configs[m.id];
-    out[m.id] = { enabled: c?.enabled ?? true, provider: resolveProvider(m), priceOverrides: c?.priceOverrides ?? {}, notes: c?.notes ?? null };
+    out[m.id] = {
+      enabled: c?.enabled ?? true,
+      provider: resolveProvider(m, { preferred: c?.provider ?? null }),
+      priceOverrides: c?.priceOverrides ?? {},
+      notes: c?.notes ?? null,
+      ...(m.supportsDraft ? { draftProvider: resolveProvider(m, { preferred: c?.provider ?? null, params: { draft: true } }) } : {}),
+    };
   }
   return out;
 }

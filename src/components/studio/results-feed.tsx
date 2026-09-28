@@ -23,13 +23,14 @@ import type { LightboxItem } from "@/components/assets/lightbox";
 import { ModelSwatch, type ModelStatus } from "@/components/studio/model-picker";
 import type { RefAsset } from "@/components/studio/reference-slots";
 import { Button } from "@/components/ui/button";
+import { Segmented } from "@/components/ui/controls";
 import { Dialog, DialogBody, DialogContent, DialogFooter } from "@/components/ui/dialog";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, Tip } from "@/components/ui/menu";
 import { EmptyState, TimeAgo } from "@/components/ui/misc";
 import { downloadUrl, downloadZip, useAssetMutations } from "@/lib/client/assets";
 import { useNow } from "@/lib/client/use-now";
 import { cancelGenerationRequest, isActive, usePushGenerations, type GenerationDTO } from "@/lib/client/generations";
-import { getModel, seedanceTokens } from "@/lib/models/registry";
+import { getModel, seedanceCompleteUsd, seedanceTokens } from "@/lib/models/registry";
 import { GENERATION_STATUS_LABEL } from "@/lib/types";
 import { cn, fetchJson, usd } from "@/lib/utils";
 
@@ -193,8 +194,9 @@ function BatchCard({
                 {c}
               </span>
             ))}
-            {first.isDraft && <span className="rounded-md bg-info/15 px-1.5 py-0.5 font-mono text-[10.5px] text-info">DRAFT</span>}
-            {first.parentGenerationId && <span className="rounded-md bg-accent-soft px-1.5 py-0.5 text-[10.5px] text-accent">최종 렌더</span>}
+            {first.isDraft && <span className="rounded-md bg-info/15 px-1.5 py-0.5 font-mono text-[10.5px] text-info">DRAFT 480p</span>}
+            {first.workflow === "draft-complete" && <span className="rounded-md bg-accent-soft px-1.5 py-0.5 text-[10.5px] text-accent">1080p 완성본</span>}
+            {first.parentGenerationId && first.workflow !== "draft-complete" && <span className="rounded-md bg-panel-2 px-1.5 py-0.5 text-[10.5px] text-fg-3">드래프트에서 새로 생성</span>}
           </div>
           <button
             type="button"
@@ -345,13 +347,13 @@ function OutputTile({
             </TileButton>
           )}
           {g.isDraft && (
-            <Tip content="720p 최종 렌더">
+            <Tip content={g.draftCompletable ? "같은 테이크 그대로 1080p로 완성" : "최종 버전 만들기"}>
               <button
                 type="button"
                 onClick={onFinalize}
                 className="flex h-7 items-center gap-1 rounded-lg bg-white px-2 text-[11px] font-semibold text-black shadow"
               >
-                <Sparkles className="size-3" /> 최종
+                <Sparkles className="size-3" /> {g.draftCompletable ? "1080p 완성" : "최종"}
               </button>
             </Tip>
           )}
@@ -386,10 +388,6 @@ function Elapsed({ since }: { since: string }) {
   return <span>{s < 60 ? `${s}초` : `${Math.floor(s / 60)}분 ${s % 60}초`}</span>;
 }
 
-/** Seedance 프로모션(30% 할인) 기간 */
-function seedancePromoActive(): boolean {
-  return Date.now() < new Date("2026-10-01T00:00:00Z").getTime();
-}
 
 function PendingTile({ g, ratio }: { g: GenerationDTO; ratio: string }) {
   const failed = g.status === "failed" || g.status === "nsfw" || g.status === "canceled";
@@ -439,15 +437,23 @@ export function FinalizeDialog({
   status: Record<string, ModelStatus>;
 }) {
   const push = usePushGenerations();
-  const [mode, setMode] = React.useState<"keep-take" | "regenerate">("keep-take");
-  const [loading, setLoading] = React.useState(false);
   const g = generations.find((x) => x.id === generationId);
+  const completable = !!g?.draftCompletable;
+  const [picked, setMode] = React.useState<"complete" | "regenerate" | null>(null);
+  const mode = picked ?? (completable ? "complete" : "regenerate");
+  const [regenRes, setRegenRes] = React.useState<"720p" | "1080p">("1080p");
+  const [loading, setLoading] = React.useState(false);
+  const now = useNow(60_000);
+
+  const overrides = status["seedance-2-5"]?.priceOverrides ?? {};
   const duration = typeof g?.params.duration === "number" ? g.params.duration : 5;
-  const per1k = status["seedance-2-5"]?.priceOverrides?.per1kTokens ?? 0.0214;
-  const promo = seedancePromoActive() ? (status["seedance-2-5"]?.priceOverrides?.promoMultiplier ?? 0.7) : 1;
-  const draftSeconds = g?.outputs[0]?.durationSec ?? duration;
-  const keepCost = (seedanceTokens("720p", draftSeconds * 2) / 1000) * per1k * promo;
-  const regenCost = (seedanceTokens("720p", duration) / 1000) * per1k * promo;
+  const draftSeconds = Math.max(4, Math.round(g?.outputs[0]?.durationSec ?? duration));
+  const completeCost = seedanceCompleteUsd(draftSeconds, overrides);
+  const regenCost =
+    regenRes === "1080p"
+      ? seedanceCompleteUsd(duration, overrides)
+      : (seedanceTokens("720p", duration) / 1000) * (overrides.per1kTokens ?? 0.0214);
+  const daysLeft = g?.draftExpiresAt && now ? Math.max(0, Math.ceil((new Date(g.draftExpiresAt).getTime() - now) / 86400_000)) : null;
 
   async function run() {
     if (!g) return;
@@ -455,11 +461,12 @@ export function FinalizeDialog({
     try {
       const res = await fetchJson<{ generations: GenerationDTO[] }>(`/api/generations/${g.id}/finalize`, {
         method: "POST",
-        body: JSON.stringify({ mode }),
+        body: JSON.stringify({ mode, resolution: regenRes }),
       });
       push(res.generations);
-      toast.success("720p 최종 렌더를 시작했어요.");
+      toast.success(mode === "complete" ? "같은 테이크를 1080p로 완성하고 있어요." : `${regenRes}로 새로 생성하고 있어요.`);
       onOpenChange(false);
+      setMode(null);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -467,16 +474,17 @@ export function FinalizeDialog({
     }
   }
 
-  const option = (value: "keep-take" | "regenerate", title: string, desc: string, cost: number) => (
+  const option = (value: "complete" | "regenerate", title: React.ReactNode, desc: React.ReactNode, cost: number, disabled?: boolean) => (
     <button
       type="button"
+      disabled={disabled}
       onClick={() => setMode(value)}
       className={cn(
-        "flex flex-col gap-1 rounded-xl border p-4 text-left transition",
+        "flex flex-col gap-1.5 rounded-xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-45",
         mode === value ? "border-fg bg-panel-2" : "border-line-2 hover:border-line-3",
       )}
     >
-      <span className="flex items-center justify-between">
+      <span className="flex items-center justify-between gap-3">
         <span className="text-[14px] font-semibold">{title}</span>
         <span className="font-mono text-[12px] text-fg-2">약 ${cost.toFixed(2)}</span>
       </span>
@@ -485,18 +493,51 @@ export function FinalizeDialog({
   );
 
   return (
-    <Dialog open={!!generationId} onOpenChange={onOpenChange}>
-      <DialogContent title="720p 최종 렌더" description="마음에 드는 드래프트를 고화질로 뽑아요.">
+    <Dialog open={!!generationId} onOpenChange={(o) => { if (!o) setMode(null); onOpenChange(o); }}>
+      <DialogContent title="드래프트 완성" description="마음에 드는 드래프트를 고화질로 뽑아요.">
         <DialogBody className="flex flex-col gap-3">
-          {option("keep-take", "이 테이크 그대로 (추천)", "드래프트 영상을 소스로 720p 재렌더링해요. 구도·움직임·타이밍을 최대한 유지해요.", keepCost)}
-          {option("regenerate", "같은 설정으로 새로 생성", "같은 프롬프트·레퍼런스로 720p를 새로 만들어요. API에 시드 고정 기능이 없어 구도가 달라질 수 있어요.", regenCost)}
+          {option(
+            "complete",
+            <span className="flex items-center gap-2">
+              같은 테이크 그대로 1080p <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[10.5px] text-accent">공식 드래프트</span>
+            </span>,
+            completable ? (
+              <>
+                Seedance 공식 드래프트 완성 기능이에요. 구도·움직임·연기·오디오를 그대로 유지한 채 1080p로 렌더해요.
+                {daysLeft !== null && <b className="ml-1 font-medium text-fg-2">완성 가능 기간 {daysLeft}일 남음</b>}
+              </>
+            ) : (
+              "이 드래프트는 완성용 ID가 없어요. (fal.ai로 만든 드래프트만 7일 안에 완성할 수 있어요)"
+            ),
+            completeCost,
+            !completable,
+          )}
+          {option(
+            "regenerate",
+            <span className="flex items-center gap-2">
+              같은 설정으로 새로 생성
+              <span onClick={(e) => e.stopPropagation()}>
+                <Segmented
+                  size="xs"
+                  value={regenRes}
+                  onChange={setRegenRes}
+                  options={[
+                    { value: "720p", label: "720p" },
+                    { value: "1080p", label: "1080p" },
+                  ]}
+                />
+              </span>
+            </span>,
+            "같은 프롬프트·레퍼런스로 새로 만들어요. 다른 테이크가 나와요.",
+            regenCost,
+          )}
         </DialogBody>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             취소
           </Button>
-          <Button variant="primary" loading={loading} onClick={run}>
-            <Sparkles /> 최종 렌더 시작
+          <Button variant="primary" loading={loading} onClick={run} disabled={!g}>
+            <Sparkles /> {mode === "complete" ? "1080p로 완성" : "새로 생성"}
           </Button>
         </DialogFooter>
       </DialogContent>

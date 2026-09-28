@@ -7,7 +7,7 @@ import { toast } from "sonner";
 
 import { ModelSwatch } from "@/components/studio/model-picker";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/controls";
+import { Segmented, Switch } from "@/components/ui/controls";
 import { Input, Textarea } from "@/components/ui/input";
 import { Badge } from "@/components/ui/misc";
 import type { PriceItem } from "@/lib/models/types";
@@ -25,7 +25,9 @@ export type AdminModelItem = {
   priceNote: string | null;
   supportsDraft: boolean;
   resolved: "higgsfield" | "fal" | "mock" | null;
-  config: { enabled: boolean; priceOverrides: Record<string, number>; notes: string | null };
+  draftResolved: "higgsfield" | "fal" | "mock" | null;
+  providers: { id: "higgsfield" | "fal"; configured: boolean }[];
+  config: { enabled: boolean; priceOverrides: Record<string, number>; notes: string | null; provider: "higgsfield" | "fal" | null };
   usage: { count: number; spend: number; failed: number };
 };
 
@@ -55,10 +57,41 @@ export function ModelsAdmin({ items }: { items: AdminModelItem[] }) {
   );
 }
 
+const PROVIDER_NAME = { higgsfield: "Higgsfield", fal: "fal.ai", mock: "모의" } as const;
+
 function ResolvedChip({ m }: { m: AdminModelItem }) {
-  if (m.resolved === m.provider) return <Badge tone="success">● 연결됨</Badge>;
   if (m.resolved === "mock") return <Badge tone="warning">● 모의 생성</Badge>;
-  return <Badge tone="danger">● API 키 필요</Badge>;
+  if (!m.resolved) return <Badge tone="danger">● API 키 필요</Badge>;
+  return <Badge tone="success">● {PROVIDER_NAME[m.resolved]}로 생성</Badge>;
+}
+
+function ProviderPicker({ m }: { m: AdminModelItem }) {
+  const router = useRouter();
+  const [value, setValue] = React.useState<"auto" | "higgsfield" | "fal">(m.config.provider ?? "auto");
+  if (m.providers.length < 2) return null;
+  async function change(v: "auto" | "higgsfield" | "fal") {
+    const prev = value;
+    setValue(v);
+    try {
+      await fetchJson("/api/admin/models", { method: "PATCH", body: JSON.stringify({ modelId: m.id, provider: v === "auto" ? null : v }) });
+      toast.success(v === "auto" ? "공급자를 자동으로 고를게요." : `${PROVIDER_NAME[v]}로 고정했어요.`);
+      router.refresh();
+    } catch (e) {
+      setValue(prev);
+      toast.error((e as Error).message);
+    }
+  }
+  return (
+    <Segmented
+      size="xs"
+      value={value}
+      onChange={change}
+      options={[
+        { value: "auto", label: "자동" },
+        ...m.providers.map((p) => ({ value: p.id, label: `${PROVIDER_NAME[p.id]}${p.configured ? "" : " (키 없음)"}` })),
+      ]}
+    />
+  );
 }
 
 function ModelCard({ m }: { m: AdminModelItem }) {
@@ -111,13 +144,20 @@ function ModelCard({ m }: { m: AdminModelItem }) {
         <div className="min-w-[200px] flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[15px] font-semibold">{m.name}</span>
-            <span className="text-[12px] text-fg-4">
-              {m.vendor} · {m.provider === "higgsfield" ? "Higgsfield API" : "fal.ai"}
-            </span>
+            <span className="text-[12px] text-fg-4">{m.vendor}</span>
             <ResolvedChip m={m} />
-            {m.supportsDraft && <Badge tone="outline">Draft 지원</Badge>}
+            {m.supportsDraft && (
+              <Badge tone="outline" title="480p 드래프트 → 같은 테이크 1080p 완성 (공식 기능)">
+                드래프트 → {m.draftResolved ? PROVIDER_NAME[m.draftResolved] : "사용 불가"}
+              </Badge>
+            )}
           </div>
           <p className="mt-0.5 line-clamp-1 text-[12.5px] text-fg-3">{m.tagline}</p>
+          {m.providers.length > 1 && (
+            <div className="mt-2 flex items-center gap-2 text-[11.5px] text-fg-4">
+              공급자 <ProviderPicker m={m} />
+            </div>
+          )}
         </div>
         <div className="flex flex-col items-end text-right">
           <span className="text-[14px] font-semibold tabular-nums">{usd(m.usage.spend)}</span>
