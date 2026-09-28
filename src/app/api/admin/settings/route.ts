@@ -21,6 +21,7 @@ const Body = z.object({
   signupDomains: z.array(z.string().trim().toLowerCase().regex(/^[a-z0-9.-]+\.[a-z]{2,}$/)).max(20).optional(),
   budgetWarnPercent: z.number().int().min(10).max(100).optional(),
   llmModel: z.string().trim().max(120).regex(/^[a-z0-9._:/-]*$/i).optional(),
+  mtProvider: z.enum(["auto", "azure", "papago", "google", "deepl", "llm", "off"]).optional(),
 });
 
 export const PATCH = handle(async (req: Request) => {

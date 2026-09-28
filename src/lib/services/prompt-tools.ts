@@ -12,6 +12,7 @@ import { usdToMicros } from "@/lib/money";
 import { alignSegments, coverage, parseJsonLoose, type Segment, splitPhrases } from "@/lib/prompt/align";
 import { detectLang, type PromptLang } from "@/lib/prompt/lang";
 import { getSettings } from "@/lib/services/settings";
+import { engineLabel, mtConvert, mtTranslatePrompt } from "@/lib/services/translate";
 import type { CurrentUser } from "@/lib/session";
 
 const MAX_CHARS = 6000;
@@ -47,7 +48,14 @@ export type TranslateResult = {
   segments: Segment[];
   cached: boolean;
   mock: boolean;
+  /** 번역한 엔진 (예: Azure Translator, AI 번역) */
+  engine?: string;
 };
+
+/** 번역 API 오류를 AI 번역으로 넘길 수 있는지 */
+function canFallBackToLlm(err: unknown): boolean {
+  return err instanceof HttpError && String(err.code ?? "").startsWith("mt_") && !!llmProvider();
+}
 
 const TRANSLATE_SYSTEM = `You are a meticulous translator for AI image and video generation prompts, working for a Korean creative studio.
 Translate each segment into literal, faithful Korean (직역) so a Korean creator can verify every detail of the original.
@@ -73,10 +81,20 @@ export async function translatePrompt(u: CurrentUser, rawText: string): Promise<
   if (lang === "empty") return { lang, segments: [], cached: false, mock: false };
   if (lang === "ko") return { lang, segments: [], cached: false, mock: false };
 
+  // 1) 번역 API (구간별 직역·캐시, 가장 싸고 빠름)
+  try {
+    const mt = await mtTranslatePrompt(u, text, lang);
+    if (mt) return { lang, segments: mt.segments, cached: mt.cached, mock: false, engine: engineLabel(mt.engine) };
+  } catch (err) {
+    if (!canFallBackToLlm(err)) throw err;
+    console.warn("[translate] 번역 API 실패 → AI 번역으로 대체", (err as Error).message);
+  }
+
+  // 2) AI 번역 (번역 API가 없을 때)
   const hash = createHash("sha256").update(`v1|ko|${text}`).digest("hex");
   const [hit] = await db.select().from(promptTranslations).where(eq(promptTranslations.hash, hash));
   if (hit) {
-    return { lang, segments: alignSegments(text, hit.segments), cached: true, mock: false };
+    return { lang, segments: alignSegments(text, hit.segments), cached: true, mock: false, engine: "AI 번역" };
   }
 
   rateLimit(u.id);
@@ -101,7 +119,7 @@ export async function translatePrompt(u: CurrentUser, rawText: string): Promise<
       .values({ hash, sourceLang: lang, targetLang: "ko", source: text, segments: rawSegs, model: res.model })
       .onConflictDoNothing();
   }
-  return { lang, segments, cached: false, mock: res.provider === "mock" };
+  return { lang, segments, cached: false, mock: res.provider === "mock", engine: res.provider === "mock" ? "모의 번역" : "AI 번역" };
 }
 
 /* ------------------------------- 단어 추천 ------------------------------- */
@@ -169,6 +187,12 @@ Reply with JSON only: {"suggestions":[{"text":"...","ko":"...","note":"..."}]}`,
 export async function convertPrompt(u: CurrentUser, rawText: string, target: "en" | "zh"): Promise<{ text: string; mock: boolean }> {
   const text = rawText.slice(0, MAX_CHARS).trim();
   if (!text) throw badRequest("변환할 프롬프트를 입력해 주세요.");
+  try {
+    const mt = await mtConvert(u, text, target);
+    if (mt) return { text: mt.text, mock: false };
+  } catch (err) {
+    if (!canFallBackToLlm(err)) throw err;
+  }
   rateLimit(u.id);
   const targetName = target === "zh" ? "Simplified Chinese" : "English";
   const res = await llmChat({

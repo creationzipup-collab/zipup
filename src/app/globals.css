@@ -106,6 +106,7 @@
 
   --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-display: var(--font-display-latin, "Pretendard Variable"), "Pretendard Variable", Pretendard, system-ui, sans-serif;
 
   --radius-xs: 6px;
   --radius-sm: 8px;
@@ -127,6 +128,12 @@
   syntax: "<angle>";
   initial-value: 0deg;
   inherits: false;
+}
+
+@keyframes hl-in {
+  from {
+    background-color: color-mix(in oklab, var(--accent) 65%, transparent);
+  }
 }
 
 @keyframes prompt-spin {

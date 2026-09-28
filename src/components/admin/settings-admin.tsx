@@ -20,6 +20,7 @@ export type SettingsValue = {
   signupDomains: string[];
   budgetWarnPercent: number;
   llmModel: string;
+  mtProvider?: string;
 };
 
 type LlmInfo = {
@@ -67,7 +68,7 @@ const SAMPLES = [
   },
 ];
 
-export function SettingsAdmin({ initial, llm }: { initial: SettingsValue; llm: LlmInfo }) {
+export function SettingsAdmin({ initial, llm, afterLlm }: { initial: SettingsValue; llm: LlmInfo; afterLlm?: React.ReactNode }) {
   const router = useRouter();
   const [v, setV] = React.useState<SettingsValue>(initial);
   const [saved, setSaved] = React.useState<SettingsValue>(initial);
@@ -237,8 +238,8 @@ export function SettingsAdmin({ initial, llm }: { initial: SettingsValue; llm: L
 
       {/* ------------------------------ LLM ------------------------------- */}
       <Section
-        title="번역·단어 추천 AI"
-        description="스튜디오의 한국어 대조 번역, 단어 추천, 한→영/중 변환에 쓰는 언어 모델이에요. 호출 1회에 보통 $0.001 미만이에요."
+        title="AI 추천 (LLM)"
+        description="'AI 추천'으로 자연스러운 표현을 받을 때, 그리고 번역 API가 없을 때 대신 번역하는 언어 모델이에요. 호출 1회에 보통 $0.001 미만이에요."
       >
         <div className="flex items-center gap-2 text-[12.5px]">
           <span className="text-fg-3">연결 상태</span>
@@ -276,6 +277,8 @@ export function SettingsAdmin({ initial, llm }: { initial: SettingsValue; llm: L
           <p className="text-[12px] text-fg-4">LLM_BASE_URL로 직접 연결 중이에요. 모델은 LLM_MODEL 환경 변수로 정해요.</p>
         )}
       </Section>
+
+      {afterLlm}
 
       {/* ---------------------------- 동시 실행 ----------------------------- */}
       <Section title="동시 실행 한도" description="공급자에 동시에 보내는 작업 수예요. 넘치는 작업은 사내 대기열에서 순서대로 처리돼요. Higgsfield 계정 플랜의 동시 실행 한도에 맞춰 주세요.">

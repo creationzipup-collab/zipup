@@ -468,7 +468,7 @@ export const promptTranslations = pgTable("prompt_translations", {
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
 
-/** LLM 사용 기록 (번역·단어 추천 비용 확인용) */
+/** LLM·번역 API 사용 기록 (번역·단어 추천 비용 확인용) */
 export const aiUsage = pgTable(
   "ai_usage",
   {
@@ -477,11 +477,26 @@ export const aiUsage = pgTable(
     feature: text().notNull(),
     model: text().notNull(),
     costMicros: bigint({ mode: "number" }).notNull().default(0),
+    /** 번역 API로 보낸 글자 수 (무료 한도 확인용) */
+    units: integer().notNull().default(0),
     cached: boolean().notNull().default(false),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index().on(t.createdAt), index().on(t.userId)],
 );
+
+/** 번역·사전 결과 캐시 (구간·단어 단위, 회사 전체가 공유) */
+export const lexiconCache = pgTable("lexicon_cache", {
+  /** sha256(종류 + 방향 + 원문) */
+  key: text().primaryKey(),
+  kind: text().$type<"mt" | "dict">().notNull(),
+  sourceLang: text().notNull(),
+  targetLang: text().notNull(),
+  source: text().notNull(),
+  result: jsonb().$type<unknown>().notNull(),
+  provider: text().notNull(),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+});
 
 export const savedSearches = pgTable(
   "saved_searches",

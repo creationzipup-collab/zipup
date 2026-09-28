@@ -22,6 +22,13 @@
       "when": 1790570496763,
       "tag": "0002_flashy_morg",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790577681188,
+      "tag": "0003_slim_venus",
+      "breakpoints": true
     }
   ]
 }

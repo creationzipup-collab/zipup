@@ -5,7 +5,9 @@ import { AnimatePresence, motion } from "motion/react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { HoverText } from "@/components/prompt-desk/prompt-editor";
 import { Button, Spinner } from "@/components/ui/button";
+import { requestWordCandidates } from "@/lib/client/lexicon";
 import { requestSuggestions, type Segment, type Suggestion } from "@/lib/client/prompt-tools";
 import { LANG_LABEL, type PromptLang } from "@/lib/prompt/lang";
 import { cn } from "@/lib/utils";
@@ -17,9 +19,13 @@ type Props = {
   loading: boolean;
   error: (Error & { status?: number }) | null;
   mock?: boolean;
+  /** 번역한 엔진 이름 */
+  engine?: string;
   stale?: boolean;
   readOnly?: boolean;
   onApply: (index: number, s: Suggestion) => void;
+  /** 원문 단어를 더블클릭해 바꿀 때 (전체 프롬프트 기준 위치) */
+  onReplaceRange?: (start: number, end: number, text: string) => void;
   onFocusRange: (start: number, end: number) => void;
   onRetry: () => void;
   onConvert?: (target: "en" | "zh") => void;
@@ -27,7 +33,7 @@ type Props = {
 };
 
 export function BilingualPanel(props: Props) {
-  const { text, lang, segments, loading, error, mock, stale, readOnly } = props;
+  const { text, lang, segments, loading, error, mock, engine, stale, readOnly } = props;
   const [open, setOpen] = React.useState<number | null>(null);
 
   // 문장이 바뀌면 열린 추천 창 닫기
@@ -66,7 +72,11 @@ export function BilingualPanel(props: Props) {
     <div className="flex min-h-0 flex-col">
       <div className="flex items-center gap-2 px-1 pb-2 text-[11.5px] text-fg-4">
         <span className="font-medium text-fg-3">{LANG_LABEL[lang] || "원문"} → 한국어 직역</span>
-        {mock && <span className="rounded bg-warning/12 px-1.5 py-0.5 text-[10.5px] text-warning">모의 번역 · LLM 미연결</span>}
+        {mock ? (
+          <span className="rounded bg-warning/12 px-1.5 py-0.5 text-[10.5px] text-warning">모의 번역 · 번역 엔진 미연결</span>
+        ) : (
+          engine && <span className="rounded border border-line-2 px-1.5 py-px font-mono text-[10px] uppercase tracking-wider text-fg-4">{engine}</span>
+        )}
         <span className="ml-auto flex items-center gap-1.5">
           {loading ? (
             <>
@@ -75,7 +85,7 @@ export function BilingualPanel(props: Props) {
           ) : stale ? (
             "입력 멈추면 번역"
           ) : (
-            !readOnly && "구간을 누르면 표현 추천"
+            !readOnly && "단어에 올리면 뜻 · 구간을 누르면 바꾸기"
           )}
         </span>
       </div>
@@ -111,7 +121,13 @@ export function BilingualPanel(props: Props) {
                 )}
               >
                 <span className={cn("absolute left-0 top-2 bottom-2 w-[2px] rounded-full transition", open === i ? "bg-accent" : "bg-transparent group-hover:bg-line-3")} />
-                <span className="text-[12.5px] leading-relaxed text-fg-3">{seg.src}</span>
+                <HoverText
+                  text={seg.src}
+                  lang={lang}
+                  offset={seg.start}
+                  onReplace={readOnly ? undefined : props.onReplaceRange}
+                  className="text-[12.5px] leading-relaxed text-fg-3"
+                />
                 <span className={cn("text-[13.5px] leading-relaxed", seg.dst ? "text-fg" : "italic text-fg-4")}>{seg.dst || "번역 없음"}</span>
               </button>
               <AnimatePresence initial={false}>
@@ -143,31 +159,47 @@ export function BilingualPanel(props: Props) {
   );
 }
 
+/** 구간을 원하는 뜻으로 고쳐 쓰면 → 번역해서 바꿀 표현 (AI 추천은 필요할 때만) */
 function SuggestBox({ prompt, seg, onApply, onClose }: { prompt: string; seg: Segment; onApply: (s: Suggestion) => void; onClose: () => void }) {
   const [ko, setKo] = React.useState(seg.dst);
-  const [focus, setFocus] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(false);
-  const [items, setItems] = React.useState<Suggestion[] | null>(null);
-  const [mock, setMock] = React.useState(false);
+  const [loading, setLoading] = React.useState<"mt" | "ai" | null>(null);
+  const [items, setItems] = React.useState<(Suggestion & { source: string })[] | null>(null);
+  const [engine, setEngine] = React.useState("");
   const inputRef = React.useRef<HTMLInputElement>(null);
-  const words = seg.dst.split(/\s+/).filter((w) => w.replace(/[\p{P}]/gu, "").length > 0);
   const edited = ko.trim() !== seg.dst.trim();
+  const tail = seg.src.match(/[,.;:!?，。；：！？]\s*$/)?.[0]?.trim() ?? "";
+  const withTail = (t: string) => (tail && !/[,.;:!?，。；：！？]$/.test(t.trim()) ? `${t.trim()}${tail}` : t.trim());
+  const target = /[\u3400-\u9fff]/.test(seg.src) ? "zh" : "en";
 
   React.useEffect(() => {
     inputRef.current?.focus();
     inputRef.current?.select();
   }, []);
 
-  async function run() {
-    setLoading(true);
+  async function runMt() {
+    if (!ko.trim()) return;
+    setLoading("mt");
     try {
-      const r = await requestSuggestions({ prompt, src: seg.src, dst: seg.dst, editedKo: edited ? ko : null, focusKo: !edited ? focus : null, count: 4 });
-      setItems(r.suggestions);
-      setMock(r.mock);
+      const r = await requestWordCandidates({ ko: ko.trim(), original: seg.src, target });
+      setItems(r.items.map((c) => ({ text: withTail(c.text), ko: c.ko, note: c.note ?? "", source: c.source })));
+      setEngine(r.engine);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
-      setLoading(false);
+      setLoading(null);
+    }
+  }
+
+  async function runAi() {
+    setLoading("ai");
+    try {
+      const r = await requestSuggestions({ prompt, src: seg.src, dst: seg.dst, editedKo: edited ? ko : null, count: 4 });
+      setItems(r.suggestions.map((s) => ({ ...s, source: r.mock ? "mock" : "llm" })));
+      setEngine(r.mock ? "모의" : "AI");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setLoading(null);
     }
   }
 
@@ -176,14 +208,14 @@ function SuggestBox({ prompt, seg, onApply, onClose }: { prompt: string; seg: Se
       className="mx-1 mb-2 mt-1 flex flex-col gap-3 rounded-xl border border-line-2 bg-bg-2/80 p-3"
       onKeyDown={(e) => {
         if (e.key === "Escape") onClose();
-        if (items && /^[1-6]$/.test(e.key) && document.activeElement?.tagName !== "INPUT") {
+        if (items && /^[1-8]$/.test(e.key) && document.activeElement?.tagName !== "INPUT") {
           const s = items[Number(e.key) - 1];
           if (s) onApply(s);
         }
       }}
     >
       <div className="flex flex-col gap-1.5">
-        <span className="text-[11.5px] text-fg-4">원하는 뜻으로 한국어를 고치거나, 바꿀 단어를 골라 주세요</span>
+        <span className="text-[11.5px] text-fg-4">원하는 뜻으로 한국어를 고쳐 쓰면 그대로 번역해서 바꿔요 · 단어 하나는 원문 단어를 더블클릭</span>
         <div className="flex items-center gap-2">
           <input
             ref={inputRef}
@@ -192,40 +224,23 @@ function SuggestBox({ prompt, seg, onApply, onClose }: { prompt: string; seg: Se
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
-                void run();
+                void runMt();
               }
             }}
             className="h-9 min-w-0 flex-1 rounded-lg border border-line-2 bg-panel px-3 text-[13.5px] outline-none transition focus:border-fg-3"
           />
-          <Button variant="primary" size="sm" loading={loading} onClick={run}>
-            {!loading && <Wand2 />} 추천
+          <Button variant="primary" size="sm" loading={loading === "mt"} onClick={runMt} disabled={!!loading}>
+            {loading !== "mt" && <Languages />} 번역해 바꾸기
           </Button>
           <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="닫기">
             <X />
           </Button>
         </div>
-        {!edited && words.length > 1 && (
-          <div className="flex flex-wrap gap-1">
-            {words.map((w, i) => (
-              <button
-                key={`${w}-${i}`}
-                type="button"
-                onClick={() => setFocus((f) => (f === w ? null : w))}
-                className={cn(
-                  "h-6 rounded-md border px-1.5 text-[12px] transition",
-                  focus === w ? "border-accent bg-accent-soft text-accent" : "border-line-2 text-fg-3 hover:border-line-3 hover:text-fg-2",
-                )}
-              >
-                {w}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {loading && !items && (
         <div className="grid gap-1.5">
-          {Array.from({ length: 3 }).map((_, i) => (
+          {Array.from({ length: 2 }).map((_, i) => (
             <div key={i} className="skeleton h-12 rounded-lg" />
           ))}
         </div>
@@ -234,8 +249,8 @@ function SuggestBox({ prompt, seg, onApply, onClose }: { prompt: string; seg: Se
       {items && (
         <div className={cn("flex flex-col gap-1.5 transition-opacity", loading && "opacity-50")}>
           <div className="flex items-center gap-2 text-[11px] text-fg-4">
-            <Sparkles className="size-3.5 text-accent" /> 누르면 영어 프롬프트에 바로 적용돼요 · 숫자키 1–{items.length}
-            {mock && <span className="rounded bg-warning/12 px-1 text-warning">모의</span>}
+            <Sparkles className="size-3.5 text-accent" /> 누르면 프롬프트에 바로 적용돼요 · 숫자키 1–{items.length}
+            {engine && <span className="ml-auto font-mono text-[10px] uppercase tracking-wider">{engine}</span>}
           </div>
           {items.map((s, i) => (
             <motion.button
@@ -243,7 +258,7 @@ function SuggestBox({ prompt, seg, onApply, onClose }: { prompt: string; seg: Se
               type="button"
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05, duration: 0.2 }}
+              transition={{ delay: i * 0.04, duration: 0.2 }}
               onClick={() => onApply(s)}
               className="group grid grid-cols-[20px_minmax(0,1fr)_auto] items-start gap-2.5 rounded-lg border border-line bg-panel px-3 py-2 text-left transition hover:border-accent/50 hover:bg-panel-2"
             >
@@ -262,11 +277,15 @@ function SuggestBox({ prompt, seg, onApply, onClose }: { prompt: string; seg: Se
               </span>
             </motion.button>
           ))}
-          <button type="button" onClick={run} className="self-start text-[11.5px] text-fg-4 underline-offset-4 hover:text-fg-2 hover:underline">
-            다른 표현 더 보기
-          </button>
         </div>
       )}
+
+      <div className="flex items-center gap-2 border-t border-line pt-2 text-[11.5px] text-fg-4">
+        <span>더 자연스러운 표현이 필요하면</span>
+        <button type="button" onClick={runAi} disabled={!!loading} className="flex items-center gap-1 text-fg-3 underline-offset-4 hover:text-fg hover:underline disabled:opacity-50">
+          {loading === "ai" ? <Spinner className="size-3" /> : <Wand2 className="size-3.5" />} AI 추천 (호출당 1원 미만)
+        </button>
+      </div>
     </div>
   );
 }

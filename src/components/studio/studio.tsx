@@ -32,6 +32,7 @@ import { useDualMonitor } from "@/lib/client/studio-channel";
 import { useResultsView } from "@/lib/client/use-results-view";
 import { defaultParams, IMAGE_MODELS, sanitizeParams, VIDEO_MODELS } from "@/lib/models/registry";
 import type { ModelDef } from "@/lib/models/types";
+import { matchCase } from "@/lib/client/lexicon";
 import { replaceSegment } from "@/lib/prompt/align";
 import { diffStats, diffWords } from "@/lib/prompt/diff";
 import type { EditableProject, StudioPrefill } from "@/lib/services/studio";
@@ -102,9 +103,15 @@ export function Studio({
   const [lastSubmitted, setLastSubmitted] = React.useState<string | null>(null);
   const [compare, setCompare] = React.useState<Baseline | null>(null);
   const [converting, setConverting] = React.useState<"en" | "zh" | null>(null);
-  const [highlight, setHighlight] = React.useState<{ start: number; end: number } | null>(null);
   const [resultsView, setResultsView] = useResultsView(`studio-${kind}`, "batches");
   const promptRef = React.useRef<HTMLTextAreaElement>(null);
+  // 강조 구간은 그 구간을 만든 글과 함께 기억 (글이 바뀌면 자동으로 사라짐)
+  const [highlightState, setHighlightState] = React.useState<{ start: number; end: number; text: string } | null>(null);
+  const highlight = highlightState && highlightState.text === prompt ? highlightState : null;
+  const setHighlight = React.useCallback(
+    (r: { start: number; end: number } | null, forText?: string) => setHighlightState(r ? { ...r, text: forText ?? promptRef.current?.value ?? "" } : null),
+    [],
+  );
   const hydrated = React.useRef(false);
 
   // 이전 설정 복원 (프리필이 없을 때). localStorage는 마운트 후에만 읽을 수 있어 effect에서 처리
@@ -146,13 +153,6 @@ export function Studio({
       startFrame: slots.startFrame ? v.startFrame : undefined,
       endFrame: slots.endFrame ? v.endFrame : undefined,
     }));
-  }
-
-  // 글이 바뀌면 강조 해제
-  const [prevPrompt, setPrevPrompt] = React.useState(prompt);
-  if (prevPrompt !== prompt) {
-    setPrevPrompt(prompt);
-    if (highlight) setHighlight(null);
   }
 
   /* ------------------------------- 비용·검증 ------------------------------- */
@@ -314,8 +314,19 @@ export function Studio({
     const out = replaceSegment(prompt, data.segments, index, s.text, s.ko);
     primeTranslation(out.text, { ...data, segments: out.segments, cached: true });
     setPrompt(out.text);
-    setHighlight({ start: out.segments[index].start, end: out.segments[index].end });
+    setHighlight({ start: out.segments[index].start, end: out.segments[index].end }, out.text);
     toast.success("영어 프롬프트에 적용했어요", { description: s.text, action: { label: "되돌리기", onClick: () => setPrompt(before) } });
+  }
+
+  /** 단어 카드에서 고른 표현으로 바꾸기 */
+  function replaceRange(start: number, end: number, text: string) {
+    const before = prompt;
+    const original = before.slice(start, end);
+    const next = matchCase(original, text);
+    const out = before.slice(0, start) + next + before.slice(end);
+    setPrompt(out);
+    setHighlight({ start, end: start + next.length }, out);
+    toast.success(`${original} → ${next}`, { action: { label: "되돌리기", onClick: () => setPrompt(before) } });
   }
 
   async function convert(target: "en" | "zh") {
@@ -389,8 +400,10 @@ export function Studio({
           mock={tr.data?.mock}
           stale={tr.stale}
           readOnly={tr.stale}
+          engine={tr.data?.engine}
           onApply={applySuggestion}
-          onFocusRange={(start, end) => setHighlight({ start, end })}
+          onReplaceRange={replaceRange}
+          onFocusRange={(start, end) => setHighlight({ start, end }, prompt)}
           onRetry={() => void tr.refetch()}
           onConvert={convert}
           converting={converting}
@@ -470,6 +483,7 @@ export function Studio({
                 lang={tr.lang}
                 kind={kind}
                 highlight={highlight}
+                onReplace={replaceRange}
                 onPasteReplace={(before) => {
                   setPasteBase(before);
                   setCompare({ key: "paste", label: "이전 내용", text: before });

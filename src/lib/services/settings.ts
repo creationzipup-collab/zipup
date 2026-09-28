@@ -19,6 +19,8 @@ export type AppSettings = {
   budgetWarnPercent: number;
   /** 번역·단어 추천 LLM 모델 (빈 값 = 기본) */
   llmModel: string;
+  /** 번역 엔진: auto(키가 있는 번역 API → AI) | azure | papago | google | deepl | llm | off */
+  mtProvider: "auto" | "azure" | "papago" | "google" | "deepl" | "llm" | "off";
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -29,6 +31,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   signupDomains: [],
   budgetWarnPercent: 80,
   llmModel: "",
+  mtProvider: "auto",
 };
 
 let cache: { at: number; value: AppSettings } | null = null;
