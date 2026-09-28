@@ -181,10 +181,10 @@ export function UsersAdmin({ initialStatus, teams, meId }: { initialStatus: Stat
           <>
             {pendingItems.length > 0 && (
               <section className="flex flex-col gap-2.5">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-[14px] font-semibold">승인 대기</h2>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <h2 className="shrink-0 text-[14px] font-semibold">승인 대기</h2>
                   <Badge tone="accent">{pendingItems.length}</Badge>
-                  <span className="text-[12px] text-fg-4">팀과 권한을 확인한 뒤 승인하세요. 승인하면 개인 작업공간이 자동으로 만들어져요.</span>
+                  <span className="order-last w-full text-[12px] text-fg-4 md:order-none md:w-auto">팀과 권한을 확인한 뒤 승인하세요. 승인하면 개인 작업공간이 자동으로 만들어져요.</span>
                   {pendingItems.length > 1 && (
                     <Button variant="ghost" size="sm" className="ml-auto" onClick={approveAll}>
                       <CheckCheck /> 희망 팀으로 모두 승인

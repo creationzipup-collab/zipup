@@ -344,7 +344,7 @@ export function Studio({
         </div>
 
         {/* 생성 바 */}
-        <div className="border-t border-line bg-bg-2/80 p-4 backdrop-blur-xl sm:px-5">
+        <div className="sticky bottom-0 z-20 border-t border-line bg-bg-2/85 p-4 backdrop-blur-xl sm:px-5 lg:static">
           <div className="flex items-center gap-2">
             <div className="flex items-center rounded-[10px] border border-line-2 bg-panel-2/60">
               <button

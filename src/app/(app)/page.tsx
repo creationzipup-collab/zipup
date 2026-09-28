@@ -69,7 +69,7 @@ export default async function HomePage() {
         </div>
         <div className="relative flex flex-col gap-8 p-6 sm:p-10">
           <div className="flex flex-col gap-2">
-            <span className="eyebrow">{greet}</span>
+            <span className="text-[13px] font-medium text-fg-3">{greet}</span>
             <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.03em] sm:text-[40px]">
               {u.name}님, 오늘은 무엇을 만들까요?
             </h1>
@@ -108,7 +108,7 @@ export default async function HomePage() {
 
       <div className="grid gap-12 xl:grid-cols-[1.4fr_1fr]">
         {/* 프로젝트 */}
-        <section className="flex flex-col gap-4">
+        <section className="flex min-w-0 flex-col gap-4">
           <SectionHead title="진행 중인 프로젝트" href="/projects" />
           <div className="grid gap-3 sm:grid-cols-2">
             {projectRows.map((p, i) => (
@@ -134,7 +134,7 @@ export default async function HomePage() {
         </section>
 
         {/* 모델 */}
-        <section className="flex flex-col gap-4">
+        <section className="flex min-w-0 flex-col gap-4">
           <SectionHead title="사용 가능한 모델" />
           <div className="flex flex-col divide-y divide-line overflow-hidden rounded-2xl border border-line bg-panel">
             {MODELS.map((m) => (

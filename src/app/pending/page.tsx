@@ -46,7 +46,7 @@ export default async function PendingPage() {
             <dd className="mt-1 truncate text-sm">{u.email}</dd>
           </div>
           <div className="bg-panel px-4 py-3">
-            <dt className="eyebrow">희망 팀</dt>
+            <dt className="text-[11.5px] font-medium text-fg-3">희망 팀</dt>
             <dd className="mt-1 text-sm">{requested ?? "-"}</dd>
           </div>
         </dl>

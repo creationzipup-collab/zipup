@@ -90,13 +90,14 @@ function createS3Driver(): StorageDriver {
 
 /* ---------------------------------- Local --------------------------------- */
 
+// 로컬 저장소는 개발용. 경로가 동적이라 번들 추적에서 제외 (운영은 S3/R2 사용)
 function localRoot(): string {
-  return path.resolve(process.cwd(), env.storage.localDir);
+  return path.resolve(/*turbopackIgnore: true*/ process.cwd(), env.storage.localDir);
 }
 
 function safeLocalPath(key: string): string {
   const root = localRoot();
-  const full = path.resolve(root, key);
+  const full = path.resolve(/*turbopackIgnore: true*/ root, key);
   if (!full.startsWith(root + path.sep)) throw new Error("잘못된 파일 경로");
   return full;
 }
@@ -153,7 +154,13 @@ export function localPathForKey(key: string): string {
 let driver: StorageDriver | null = null;
 
 export function storage(): StorageDriver {
-  if (!driver) driver = env.storage.driver === "s3" ? createS3Driver() : createLocalDriver();
+  if (!driver) {
+    if (env.storage.driver !== "s3" && process.env.VERCEL) {
+      // Vercel 함수의 디스크는 읽기 전용·일회성이라 결과물을 보관할 수 없음
+      throw new Error("Vercel에서는 S3 호환 스토리지(Cloudflare R2) 설정이 필요해요. S3_BUCKET 등 환경 변수를 확인해 주세요.");
+    }
+    driver = env.storage.driver === "s3" ? createS3Driver() : createLocalDriver();
+  }
   return driver;
 }
 

@@ -134,7 +134,7 @@ export async function storeAsset(input: StoreAssetInput): Promise<AssetRow> {
 
   // 자동 파일명
   const [proj] = await db
-    .select({ name: projects.name, teamName: teams.name })
+    .select({ name: projects.name, isPersonal: projects.isPersonal, teamName: teams.name })
     .from(projects)
     .leftJoin(teams, eq(teams.id, projects.teamId))
     .where(eq(projects.id, input.projectId));
@@ -146,7 +146,8 @@ export async function storeAsset(input: StoreAssetInput): Promise<AssetRow> {
     input.source === "upload" && input.originalName
       ? uploadName(input.originalName, ext)
       : renderFilename(settings.filenameTemplate, {
-          project: proj?.name ?? "project",
+          // 개인 작업공간은 "내 작업공간" 대신 만든 사람 이름으로 (공유·다운로드 시 알아보기 쉽게)
+          project: proj?.isPersonal ? `${creator?.name ?? "user"}-개인` : (proj?.name ?? "project"),
           team: proj?.teamName,
           user: creator?.name ?? "user",
           model: input.modelId ? MODEL_SLUG[input.modelId] ?? input.modelId : input.kind,
