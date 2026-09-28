@@ -21,11 +21,13 @@ import {
   useViewport,
   ViewportPortal,
 } from "@xyflow/react";
-import { useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AnimatePresence } from "motion/react";
 import {
   ArrowLeft,
   Check,
   CloudOff,
+  GalleryVerticalEnd,
   Keyboard,
   LayoutList,
   Loader2,
@@ -54,33 +56,36 @@ import { Switch } from "@/components/ui/controls";
 import { Popover, PopoverContent, PopoverTrigger, Tip } from "@/components/ui/menu";
 import { Kbd } from "@/components/ui/misc";
 import { createGenerationRequest, useActiveGenerations, usePushGenerations, type GenerationDTO } from "@/lib/client/generations";
+import { useIsClient } from "@/lib/client/use-is-client";
 import { defaultParams, getModel, sanitizeParams } from "@/lib/models/registry";
-import { TERMINAL_STATUSES } from "@/lib/types";
+import { ACTIVE_STATUSES, TERMINAL_STATUSES } from "@/lib/types";
 import { cn, fetchJson, randomId, usd } from "@/lib/utils";
 
-import { CanvasContext, portType, type AssetInputData, type GenData, type ListData, type PromptData } from "./canvas-context";
+import { CanvasContext, chosenOutput, portType, type AssetInputData, type GenData, type ListData, type PromptData } from "./canvas-context";
 import { NODE_DEF, NODE_DEFS, type NodeKind } from "./catalog";
 import { cloneGraph, copyToClipboard, type Guides, mergeRuntime, readClipboard, snapToGuides, type Snapshot, useCanvasHistory } from "./helpers";
 import { NODE_TYPES } from "./nodes";
 import { PeerStack, RemoteCursors, usePresence } from "./presence";
 import { QuickAdd, type QuickAddChoice, type QuickAddFrom } from "./quick-add";
+import { type CanvasResult, groupRuns, ResultsPanel, type ResultRun } from "./results-panel";
 import { type LaserStroke, SKETCH_COLORS, SketchCapture, type SketchMode, SketchStrokes, SketchToolbar, type Stroke } from "./sketch";
 
 type Graph = { nodes: Node[]; edges: Edge[]; viewport?: { x: number; y: number; zoom: number }; sketch?: Stroke[] };
 
-const PORT_STROKE = { text: "var(--line-3)", image: "#ff5b24", video: "#4c8dff" } as const;
+const PORT_STROKE = { text: "rgb(223 232 242 / 0.42)", image: "#1ea7ff", video: "#a48bff" } as const;
 const NODE_WIDTH: Partial<Record<NodeKind, number>> = { prompt: 300, list: 290, imageInput: 240, videoInput: 240, imageGen: 340, videoGen: 340, note: 260 };
-/** 리스트로 한 번에 돌릴 수 있는 최대 조합 수 */
+/** 반복 입력으로 한 번에 돌릴 수 있는 최대 조합 수 */
 const MAX_FAN_OUT = 24;
 
-type Prefs = { wheel: "pan" | "zoom"; snap: boolean; minimap: boolean };
+type Prefs = { wheel: "pan" | "zoom"; snap: boolean; minimap: boolean; results: boolean };
+const DEFAULT_PREFS: Prefs = { wheel: "pan", snap: false, minimap: true, results: false };
 const PREFS_KEY = "zipup-canvas-prefs";
 
 function loadPrefs(): Prefs {
   try {
-    return { wheel: "pan", snap: false, minimap: true, ...(JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}") as Partial<Prefs>) };
+    return { ...DEFAULT_PREFS, ...(JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}") as Partial<Prefs>) };
   } catch {
-    return { wheel: "pan", snap: false, minimap: true };
+    return DEFAULT_PREFS;
   }
 }
 
@@ -88,7 +93,12 @@ function toRef(o: GenerationDTO["outputs"][number]): RefAsset {
   return { id: o.id, kind: o.kind, filename: o.filename, width: o.width, height: o.height, durationSec: o.durationSec, urls: o.urls };
 }
 
-const edgeStyle = (port: keyof typeof PORT_STROKE) => ({ stroke: PORT_STROKE[port], strokeWidth: 1.8 });
+const edgeStyle = (port: keyof typeof PORT_STROKE) => ({ stroke: PORT_STROKE[port], strokeWidth: 1.6 });
+const edgePort = (e: Edge): keyof typeof PORT_STROKE => portType(undefined, e.targetHandle) ?? portType(undefined, e.sourceHandle) ?? "text";
+
+const TYPE_LABEL: Record<string, string> = { prompt: "프롬프트", list: "반복 입력", imageInput: "이미지", videoInput: "영상", imageGen: "이미지 생성", videoGen: "영상 생성", note: "메모" };
+/** 결과 모음에서 한 번에 불러오는 실행 수 */
+const RESULTS_PAGE = 120;
 
 export function CanvasEditor(props: {
   canvas: { id: string; name: string; projectId: string; projectName: string; graph: Graph };
@@ -96,6 +106,9 @@ export function CanvasEditor(props: {
   status: Record<string, ModelStatus>;
   me: { id: string; name: string };
 }) {
+  // 캔버스는 브라우저에서만 그려요. 서버에서 그린 뒤 이어받으면 노드 크기를 처음 잴 때 다시 그리기가 꼬일 수 있어요.
+  const client = useIsClient();
+  if (!client) return <div className="canvas-surface h-[calc(100dvh-56px)] w-full bg-bg" aria-busy />;
   return (
     <ReactFlowProvider>
       <Editor {...props} />
@@ -118,10 +131,10 @@ function Editor({
   const qc = useQueryClient();
   const push = usePushGenerations();
   const rf = useReactFlow();
-  const { zoom } = useViewport();
   const [confirm, confirmDialog] = useConfirm();
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(canvas.graph.nodes ?? []);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(canvas.graph.edges ?? []);
+  // 저장된 선 색은 예전 색일 수 있어서, 불러올 때 연결된 포트 종류로 한 번 다시 칠해요
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>((canvas.graph.edges ?? []).map((e) => ({ ...e, style: { ...e.style, ...edgeStyle(edgePort(e)) } })));
   const [sketch, setSketch] = React.useState<Stroke[]>(canvas.graph.sketch ?? []);
   const [liveStroke, setLiveStroke] = React.useState<Stroke | null>(null);
   const [remoteLive, setRemoteLive] = React.useState<Record<string, Stroke>>({});
@@ -131,13 +144,15 @@ function Editor({
   const [name, setName] = React.useState(canvas.name);
   const [saveState, setSaveState] = React.useState<"saved" | "saving" | "error">("saved");
   const [picker, setPicker] = React.useState<{ nodeId: string; kind: "image" | "video"; multiple?: boolean } | null>(null);
-  const [lightbox, setLightbox] = React.useState<LightboxItem | null>(null);
+  const [lightbox, setLightbox] = React.useState<{ items: LightboxItem[]; index: number } | null>(null);
   const [runningAll, setRunningAll] = React.useState(false);
   const [quick, setQuick] = React.useState<{ at: { x: number; y: number }; flow: { x: number; y: number }; from: QuickAddFrom | null } | null>(null);
   const [guides, setGuides] = React.useState<Guides>({ x: null, y: null });
   const [dragPort, setDragPort] = React.useState<keyof typeof PORT_STROKE | null>(null);
-  const [prefs, setPrefsState] = React.useState<Prefs>({ wheel: "pan", snap: false, minimap: true });
+  const [prefs, setPrefsState] = React.useState<Prefs>(DEFAULT_PREFS);
   const [outline, setOutline] = React.useState(false);
+  const [resultsNode, setResultsNode] = React.useState<string | null>(null);
+  const [resultsLimit, setResultsLimit] = React.useState(RESULTS_PAGE);
   const [help, setHelp] = React.useState(false);
   const pointer = React.useRef<{ x: number; y: number } | null>(null);
 
@@ -243,29 +258,46 @@ function Editor({
 
   /* ------------------------------ 생성 결과 반영 ------------------------------ */
   const { data: active = [] } = useActiveGenerations();
+  // 진행 중 목록(내 것)과 결과 모음(모든 참여자)을 합쳐 두는 곳 — 한쪽만 온 실행도 뒤섞이지 않게
+  const genCache = React.useRef(new Map<string, GenerationDTO>());
   const applyGenerations = React.useCallback(
     (gens: GenerationDTO[]) => {
-      setNodes((ns) =>
-        ns.map((n) => {
+      const cache = genCache.current;
+      for (const g of gens) {
+        const prev = cache.get(g.id);
+        // 끝난 기록을 더 늦게 도착한 진행 중 기록으로 덮지 않아요
+        if (prev && TERMINAL_STATUSES.includes(prev.status) && !TERMINAL_STATUSES.includes(g.status)) continue;
+        cache.set(g.id, g);
+      }
+      // 바뀐 노드가 없으면 배열도 그대로 둬요 (캔버스가 처음 크기를 잴 때 새 배열이 들어가면 계속 다시 그려져요)
+      setNodes((ns) => {
+        let changed = false;
+        const next = ns.map((n) => {
           const d = n.data as GenData;
           if (!d.runs?.length) return n;
-          const mine = gens.filter((g) => d.runs!.includes(g.id));
-          if (!mine.length) return n;
-          const statuses = mine.map((g) => g.status);
-          const allDone = statuses.every((s) => TERMINAL_STATUSES.includes(s));
-          const outputs = mine.flatMap((g) => g.outputs.map(toRef));
-          const failed = mine.find((g) => g.status === "failed" || g.status === "nsfw");
-          const status = allDone ? (outputs.length ? "completed" : failed?.status ?? "failed") : mine.find((g) => !TERMINAL_STATUSES.includes(g.status))!.status;
+          const known = d.runs
+            .map((id) => cache.get(id))
+            .filter((g): g is GenerationDTO => !!g)
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+          if (!known.length) return n;
+          const complete = known.length === d.runs.length;
+          const running = known.find((g) => !TERMINAL_STATUSES.includes(g.status));
+          const outputs = known.flatMap((g) => g.outputs.map(toRef));
+          const failed = known.find((g) => g.status === "failed" || g.status === "nsfw");
+          const status = running ? running.status : complete ? (outputs.length ? "completed" : failed?.status ?? "failed") : d.status;
           const next: GenData = {
             ...d,
             status,
-            outputs: outputs.length ? outputs : d.outputs,
-            error: allDone && !outputs.length ? failed?.errorMessage ?? "생성에 실패했어요." : null,
+            // 일부만 알 때는 더 많이 아는 쪽을 유지
+            outputs: complete || outputs.length > (d.outputs?.length ?? 0) ? outputs : d.outputs,
+            error: !running && complete && !outputs.length ? failed?.errorMessage ?? "생성에 실패했어요." : null,
           };
           if (JSON.stringify(next) === JSON.stringify(d)) return n;
+          changed = true;
           return { ...n, data: next };
-        }),
-      );
+        });
+        return changed ? next : ns;
+      });
     },
     [setNodes],
   );
@@ -274,17 +306,31 @@ function Editor({
     if (mine.length) applyGenerations(mine);
   }, [active, applyGenerations]);
 
-  // 처음 열 때 이 캔버스의 최근 실행 상태 동기화
+  /* -------------------------------- 결과 모음 -------------------------------- */
+  const resultsKey = React.useMemo(() => ["generations", "canvas", canvas.id] as const, [canvas.id]);
+  const resultsQuery = useQuery({
+    queryKey: [...resultsKey, resultsLimit],
+    queryFn: () => fetchJson<{ items: CanvasResult[]; hasMore: boolean }>(`/api/canvases/${canvas.id}/results?limit=${resultsLimit}`),
+    placeholderData: keepPreviousData,
+    // 생성 중이면 자주, 결과 모음을 열어 두면 가끔(다른 사람이 돌린 것도 보이게)
+    refetchInterval: (q) => (q.state.data?.items.some((g) => ACTIVE_STATUSES.includes(g.status)) ? 2500 : prefs.results ? 15_000 : false),
+  });
+  const resultItems = resultsQuery.data?.items;
   React.useEffect(() => {
-    fetchJson<{ items: GenerationDTO[] }>(`/api/generations?canvasId=${canvas.id}&limit=60`)
-      .then((r) => applyGenerations(r.items))
-      .catch(() => {});
-  }, [canvas.id, applyGenerations]);
+    if (resultItems?.length) applyGenerations(resultItems);
+  }, [resultItems, applyGenerations]);
+  const runs = React.useMemo(() => groupRuns(resultItems ?? []), [resultItems]);
+  const resultCounts = React.useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of runs) if (r.nodeId) m.set(r.nodeId, (m.get(r.nodeId) ?? 0) + r.outputs.length);
+    return m;
+  }, [runs]);
+  const resultTotal = runs.reduce((s, r) => s + r.outputs.length, 0);
 
   /* ---------------------------------- 실행 ---------------------------------- */
   type Dim = { handle: string; texts?: string[]; assets?: RefAsset[] };
 
-  /** 들어오는 연결 모으기 — 리스트는 "차원"으로 따로 (항목마다 한 번씩 실행) */
+  /** 들어오는 연결 모으기 — 반복 입력은 "차원"으로 따로 (항목마다 한 번씩 실행) */
   const gather = React.useCallback((nodeId: string) => {
     const ns = nodesRef.current;
     const incoming = edgesRef.current.filter((e) => e.target === nodeId);
@@ -314,8 +360,7 @@ function Editor({
       if (src.type === "prompt") text = (src.data as PromptData).text;
       else if (src.type === "imageInput" || src.type === "videoInput") asset = (src.data as AssetInputData).asset;
       else if (src.type === "imageGen" || src.type === "videoGen") {
-        const d = src.data as GenData;
-        asset = d.outputs?.[d.selected ?? 0];
+        asset = chosenOutput(src.data as GenData);
         if (!asset) missing = "앞 단계 노드를 먼저 실행해 주세요.";
       }
       switch (e.targetHandle) {
@@ -367,14 +412,14 @@ function Editor({
         toast.error(g.missing);
         return;
       }
-      // 리스트 조합 만들기 (카테시안 곱)
+      // 반복 입력 조합 만들기 (카테시안 곱)
       let combos: Record<string, string | RefAsset>[] = [{}];
       for (const dim of g.dims) {
         const values: (string | RefAsset)[] = dim.texts ?? dim.assets ?? [];
         combos = combos.flatMap((c) => values.map((v) => ({ ...c, [dim.handle]: v })));
       }
       if (combos.length > MAX_FAN_OUT) {
-        toast.error(`리스트 조합이 ${combos.length}개예요. 한 번에 ${MAX_FAN_OUT}개까지 실행할 수 있어요.`);
+        toast.error(`반복 입력 조합이 ${combos.length}개예요. 한 번에 ${MAX_FAN_OUT}개까지 실행할 수 있어요.`);
         return;
       }
       const params = sanitizeParams(model, { ...defaultParams(model), ...(d.params ?? {}) });
@@ -403,15 +448,17 @@ function Editor({
           runs.push(...res.generations.map((x) => x.id));
           push(res.generations);
         }
-        rf.updateNodeData(nodeId, { runs, status: "pending", selected: 0 });
-        if (combos.length > 1) toast.success(`리스트 ${combos.length}개 조합으로 실행했어요`);
+        rf.updateNodeData(nodeId, { runs, status: "pending", selected: 0, pickId: null, outputs: [] });
+        if (combos.length > 1) toast.success(`반복 입력 ${combos.length}개 조합으로 실행했어요`);
       } catch (e) {
-        if (runs.length) rf.updateNodeData(nodeId, { runs, status: "pending", selected: 0 });
+        if (runs.length) rf.updateNodeData(nodeId, { runs, status: "pending", selected: 0, pickId: null, outputs: [] });
         else rf.updateNodeData(nodeId, { status: "failed", error: (e as Error).message });
         toast.error((e as Error).message);
+      } finally {
+        void qc.invalidateQueries({ queryKey: resultsKey });
       }
     },
-    [gather, rf, canvas.projectId, canvas.id, push],
+    [gather, rf, canvas.projectId, canvas.id, push, qc, resultsKey],
   );
 
   /** 위상 정렬 순서로 생성 노드 전체 실행 (앞 단계 완료를 기다림) */
@@ -530,7 +577,7 @@ function Editor({
       if (!canEdit) return;
       const c = changes[0];
       if (changes.length === 1 && c.type === "position" && c.dragging && c.position && !prefs.snap) {
-        const res = snapToGuides(c, nodesRef.current, 7 / zoom);
+        const res = snapToGuides(c, nodesRef.current, 7 / rf.getZoom());
         c.position = res.position;
         setGuides(res.guides);
       } else if (changes.some((x) => x.type === "position" && x.dragging === false)) {
@@ -538,7 +585,7 @@ function Editor({
       }
       onNodesChange(changes);
     },
-    [canEdit, prefs.snap, zoom, onNodesChange],
+    [canEdit, prefs.snap, rf, onNodesChange],
   );
 
   /* ------------------------------ 단축키 ------------------------------ */
@@ -632,6 +679,18 @@ function Editor({
         return;
       }
       if (k === "?") return setHelp((h) => !h);
+      if (k === "r") {
+        setOutline(false);
+        setResultsNode(null);
+        setPrefsState((p) => {
+          const next = { ...p, results: !p.results };
+          try {
+            localStorage.setItem(PREFS_KEY, JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+        return;
+      }
       if (k.startsWith("arrow") && canEdit) {
         const sel = nodesRef.current.some((n) => n.selected);
         if (!sel) return;
@@ -652,6 +711,93 @@ function Editor({
     [nodes],
   );
   const shownEdges = React.useMemo(() => edges.map((e) => (runningIds.has(e.target) ? { ...e, animated: true } : e)), [edges, runningIds]);
+
+  /* ------------------------------- 노드 이름 ------------------------------- */
+  // 같은 종류가 여러 개면 만든 순서대로 번호 (이미지 생성 1, 이미지 생성 2 …)
+  const labelSig = nodes.map((n) => `${n.id}:${n.type}`).join("|");
+  const labels = React.useMemo(() => {
+    const byType = new Map<string, string[]>();
+    for (const part of labelSig ? labelSig.split("|") : []) {
+      const [id, type] = part.split(":");
+      byType.set(type, [...(byType.get(type) ?? []), id]);
+    }
+    const out = new Map<string, string>();
+    for (const [type, ids] of byType) ids.forEach((id, i) => out.set(id, ids.length > 1 ? `${TYPE_LABEL[type] ?? type} ${i + 1}` : TYPE_LABEL[type] ?? type));
+    return out;
+  }, [labelSig]);
+  const nodeLabel = React.useCallback((id: string) => labels.get(id) ?? "노드", [labels]);
+
+  /* ---------------------------- 결과 모음 동작 ---------------------------- */
+  const setResultsOpen = (open: boolean, node: string | null = null) => {
+    setResultsNode(node);
+    if (open) setOutline(false);
+    setPrefs({ results: open });
+  };
+  const openResults = React.useCallback((nodeId: string) => {
+    setResultsNode(nodeId);
+    setOutline(false);
+    setPrefsState((p) => {
+      const next = { ...p, results: true };
+      try {
+        localStorage.setItem(PREFS_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  const focusNode = React.useCallback(
+    (id: string) => {
+      const n = nodesRef.current.find((x) => x.id === id);
+      if (!n) return;
+      setNodes((ns) => ns.map((x) => ({ ...x, selected: x.id === id })));
+      void rf.fitView({ nodes: [n], duration: 500, padding: 0.6, maxZoom: 1.2 });
+    },
+    [rf, setNodes],
+  );
+
+  /** 결과 모음에서 고른 결과를 그 노드의 출력으로 (예전 실행이면 그 실행으로 되돌려요) */
+  function pickResult(run: ResultRun, assetId: string) {
+    if (!run.nodeId || !canEdit) return;
+    const idx = run.outputs.findIndex((o) => o.id === assetId);
+    rf.updateNodeData(run.nodeId, {
+      runs: run.generationIds,
+      outputs: run.outputs.map(toRef),
+      status: "completed",
+      error: null,
+      selected: Math.max(0, idx),
+      pickId: assetId,
+    });
+    toast(`${nodeLabel(run.nodeId)} → 다음 노드로 이 결과를 넘겨요`);
+  }
+
+  /** 결과를 캔버스에 입력 노드로 꺼내기 (만든 노드 오른쪽에 차례로) */
+  const placed = React.useRef(0);
+  function placeResult(asset: RefAsset, nodeId: string | null) {
+    const src = nodeId ? nodesRef.current.find((n) => n.id === nodeId) : undefined;
+    const step = placed.current++ % 6;
+    const pos = src
+      ? { x: src.position.x + (src.measured?.width ?? 340) + 90, y: src.position.y + step * 44 }
+      : rf.screenToFlowPosition({ x: window.innerWidth / 2 - 200 + step * 24, y: window.innerHeight / 2 + step * 24 });
+    const id = newId(`${asset.kind}Input`);
+    setNodes((ns) => [
+      ...ns.map((n) => ({ ...n, selected: false })),
+      { id, type: asset.kind === "image" ? "imageInput" : "videoInput", position: pos, data: { asset }, selected: true },
+    ]);
+    setTimeout(() => {
+      const n = rf.getNode(id);
+      if (n) void rf.fitView({ nodes: [n], duration: 450, padding: 1.2, maxZoom: Math.max(rf.getZoom(), 0.6) });
+    }, 60);
+  }
+
+  const chosen = React.useMemo(() => {
+    const m = new Map<string, string>();
+    for (const n of nodes) {
+      if (n.type !== "imageGen" && n.type !== "videoGen") continue;
+      const o = chosenOutput(n.data as GenData);
+      if (o) m.set(n.id, o.id);
+    }
+    return m;
+  }, [nodes]);
 
   const totalEstimate = nodes.reduce((sum, n) => {
     if (n.type !== "imageGen" && n.type !== "videoGen") return sum;
@@ -674,9 +820,12 @@ function Editor({
       runNode,
       fanOut,
       pickAsset: (nodeId: string, kind: "image" | "video", multiple?: boolean) => setPicker({ nodeId, kind, multiple }),
-      openAsset: (a: RefAsset) => setLightbox({ id: a.id, kind: a.kind, urls: a.urls, width: a.width, height: a.height, durationSec: a.durationSec, filename: a.filename }),
+      openAsset: (a: RefAsset) => setLightbox({ items: [{ id: a.id, kind: a.kind, urls: a.urls, width: a.width, height: a.height, durationSec: a.durationSec, filename: a.filename }], index: 0 }),
+      nodeLabel,
+      resultCount: (id: string) => resultCounts.get(id) ?? 0,
+      openResults,
     }),
-    [canvas.id, canvas.projectId, canEdit, status, runNode, fanOut],
+    [canvas.id, canvas.projectId, canEdit, status, runNode, fanOut, nodeLabel, resultCounts, openResults],
   );
 
   const figma = prefs.wheel === "pan";
@@ -758,7 +907,7 @@ function Editor({
               zoomable
               className="!rounded-xl !border !border-line-2"
               maskColor="rgb(0 0 0 / 0.5)"
-              nodeColor={(n) => (n.type === "imageGen" ? "#ff5b24" : n.type === "videoGen" ? "#4c8dff" : n.type === "note" ? "#f5c542" : n.type === "list" ? "#c084fc" : "#666")}
+              nodeColor={(n) => (n.type === "imageGen" || n.type === "imageInput" ? "#1ea7ff" : n.type === "videoGen" || n.type === "videoInput" ? "#a48bff" : n.type === "note" ? "#f5b83d" : "#4a5560")}
             />
           )}
 
@@ -841,8 +990,22 @@ function Editor({
                 <PeerStack peers={presence.peers} status={presence.status} me={me} />
               </span>
               <Tip content="노드 목록">
-                <Button variant={outline ? "secondary" : "ghost"} size="icon-sm" onClick={() => setOutline((o) => !o)} aria-label="노드 목록">
+                <Button
+                  variant={outline ? "secondary" : "ghost"}
+                  size="icon-sm"
+                  onClick={() => {
+                    if (!outline) setResultsOpen(false);
+                    setOutline((o) => !o);
+                  }}
+                  aria-label="노드 목록"
+                >
                   <LayoutList />
+                </Button>
+              </Tip>
+              <Tip content="결과 모음 — 이 캔버스에서 나온 결과 전부" shortcut="R">
+                <Button variant={prefs.results ? "secondary" : "ghost"} size="sm" onClick={() => setResultsOpen(!prefs.results)} aria-pressed={prefs.results}>
+                  <GalleryVerticalEnd /> 결과
+                  <span className={cn("font-mono text-[11px] tabular-nums", resultTotal ? "text-accent" : "text-fg-4")}>{resultTotal}</span>
                 </Button>
               </Tip>
               <span className="px-1 font-mono text-[12px] text-fg-3">예상 {usd(Math.round(totalEstimate * 1_000_000))}</span>
@@ -869,7 +1032,6 @@ function Editor({
                           "flex size-10 items-center justify-center rounded-xl text-fg-2 transition hover:bg-panel-3 hover:text-fg",
                           p.tone === "image" && "text-accent",
                           p.tone === "video" && "text-info",
-                          p.type === "list" && "text-[#c084fc]",
                         )}
                       >
                         <Icon className="size-[18px]" />
@@ -887,10 +1049,9 @@ function Editor({
             </Panel>
           )}
 
-          {/* 오른쪽 아래: 확대·맞추기·설정 */}
-          <Panel position="bottom-right" className="!m-3">
+          {/* 오른쪽 아래: 확대·맞추기·설정 (결과 모음이 열리면 그 옆으로) */}
+          <Panel position="bottom-right" className={cn("!m-3 transition-[margin] duration-300", prefs.results && "sm:!mr-[416px]")}>
             <ZoomBar
-              zoom={zoom}
               prefs={prefs}
               onPrefs={setPrefs}
               onHelp={() => setHelp(true)}
@@ -919,10 +1080,9 @@ function Editor({
           </Panel>
 
           {drawing && (
-            <SketchCapture
+            <ZoomedSketchCapture
               mode={mode}
               color={penColor}
-              size={6 / Math.max(zoom, 0.25)}
               strokes={sketch}
               me={me}
               onLive={(s) => {
@@ -953,10 +1113,31 @@ function Editor({
           )}
         </ReactFlow>
 
-        {outline && <Outline nodes={nodes} onClose={() => setOutline(false)} onFocus={(n) => {
-          setNodes((ns) => ns.map((x) => ({ ...x, selected: x.id === n.id })));
-          void rf.fitView({ nodes: [n], duration: 500, padding: 0.6, maxZoom: 1.2 });
-        }} />}
+        {outline && <Outline nodes={nodes} label={nodeLabel} onClose={() => setOutline(false)} onFocus={(n) => focusNode(n.id)} />}
+
+        <AnimatePresence>
+          {prefs.results && (
+            <ResultsPanel
+              key="results"
+              runs={runs}
+              loading={resultsQuery.isLoading}
+              hasMore={!!resultsQuery.data?.hasMore}
+              onMore={() => setResultsLimit((l) => Math.min(300, l + RESULTS_PAGE))}
+              me={me.id}
+              canEdit={canEdit}
+              nodeExists={(id) => labels.has(id)}
+              nodeLabel={nodeLabel}
+              filterNode={resultsNode}
+              onFilterNode={setResultsNode}
+              chosen={chosen}
+              onPick={pickResult}
+              onPlace={placeResult}
+              onFocusNode={focusNode}
+              onOpen={(items, index) => setLightbox({ items, index })}
+              onClose={() => setResultsOpen(false)}
+            />
+          )}
+        </AnimatePresence>
 
         {help && <ShortcutHelp onClose={() => setHelp(false)} />}
       </div>
@@ -989,7 +1170,9 @@ function Editor({
           } else rf.updateNodeData(picker.nodeId, { asset: items[0] });
         }}
       />
-      {lightbox && <Lightbox items={[lightbox]} index={0} onIndexChange={() => {}} onClose={() => setLightbox(null)} />}
+      {lightbox && (
+        <Lightbox items={lightbox.items} index={lightbox.index} onIndexChange={(index) => setLightbox((l) => (l ? { ...l, index } : l))} onClose={() => setLightbox(null)} />
+      )}
       {confirmDialog}
     </CanvasContext.Provider>
   );
@@ -1007,8 +1190,13 @@ function GuideLines({ guides }: { guides: Guides }) {
   );
 }
 
+/** 펜 굵기는 화면 배율에 맞춰요 (배율이 바뀔 때 이 부분만 다시 그려요) */
+function ZoomedSketchCapture(props: Omit<React.ComponentProps<typeof SketchCapture>, "size">) {
+  const { zoom } = useViewport();
+  return <SketchCapture {...props} size={6 / Math.max(zoom, 0.25)} />;
+}
+
 function ZoomBar({
-  zoom,
   prefs,
   onPrefs,
   onZoomIn,
@@ -1017,7 +1205,6 @@ function ZoomBar({
   onFit,
   onHelp,
 }: {
-  zoom: number;
   prefs: Prefs;
   onPrefs: (p: Partial<Prefs>) => void;
   onZoomIn: () => void;
@@ -1026,6 +1213,8 @@ function ZoomBar({
   onFit: () => void;
   onHelp: () => void;
 }) {
+  // 배율 표시만 화면 이동·확대를 따라 다시 그려요 (캔버스 전체가 아니라)
+  const { zoom } = useViewport();
   return (
     <div className="glass flex items-center gap-0.5 rounded-2xl p-1 shadow-[var(--shadow-soft)]">
       <Tip content="축소" shortcut="⌘-">
@@ -1100,9 +1289,7 @@ function ZoomBar({
   );
 }
 
-const TYPE_LABEL: Record<string, string> = { prompt: "프롬프트", list: "리스트", imageInput: "이미지", videoInput: "영상", imageGen: "이미지 생성", videoGen: "영상 생성", note: "메모" };
-
-function Outline({ nodes, onFocus, onClose }: { nodes: Node[]; onFocus: (n: Node) => void; onClose: () => void }) {
+function Outline({ nodes, label, onFocus, onClose }: { nodes: Node[]; label: (id: string) => string; onFocus: (n: Node) => void; onClose: () => void }) {
   const describe = (n: Node): string => {
     const d = n.data as Record<string, unknown>;
     if (n.type === "prompt" || n.type === "note") return String(d.text ?? "").slice(0, 60) || "(비어 있음)";
@@ -1135,7 +1322,7 @@ function Outline({ nodes, onFocus, onClose }: { nodes: Node[]; onFocus: (n: Node
                     running ? "animate-pulse bg-warning" : d.status === "completed" ? "bg-success" : d.status === "failed" ? "bg-danger" : "bg-line-3",
                   )}
                 />
-                <span className="w-16 shrink-0 text-[11px] text-fg-4">{TYPE_LABEL[n.type ?? ""] ?? n.type}</span>
+                <span className="w-20 shrink-0 truncate text-[11px] text-fg-4">{label(n.id)}</span>
                 <span className="min-w-0 flex-1 truncate text-[12px]">{describe(n)}</span>
               </button>
             </li>
@@ -1158,6 +1345,7 @@ const SHORTCUTS: [string, string][] = [
   ["⌘A", "모두 선택"],
   ["방향키 (⇧)", "선택한 노드 1px(10px) 이동"],
   ["⇧1 · ⇧2", "전체 보기 · 선택한 노드 보기"],
+  ["R", "결과 모음 열고 닫기"],
   ["⌘+ · ⌘- · ⌘0", "확대 · 축소 · 100%"],
   ["⌫", "선택 삭제"],
 ];

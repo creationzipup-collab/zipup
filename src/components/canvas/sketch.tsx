@@ -22,7 +22,7 @@ export type LaserStroke = { id: string; color: string; points: number[][]; ended
 
 export type SketchMode = "select" | "pan" | "pen" | "laser" | "eraser";
 
-export const SKETCH_COLORS = ["#ff5b24", "#f4f4f5", "#4c8dff", "#f5c542", "#34d399"];
+export const SKETCH_COLORS = ["#1ea7ff", "#eef4fa", "#a48bff", "#f5b83d", "#3ddc97"];
 
 const round = (n: number) => Math.round(n * 10) / 10;
 

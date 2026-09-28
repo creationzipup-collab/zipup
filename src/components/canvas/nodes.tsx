@@ -3,6 +3,7 @@
 import { Handle, NodeResizer, Position, useReactFlow, type NodeProps } from "@xyflow/react";
 import {
   AlertTriangle,
+  ArrowUpRight,
   Check,
   Clapperboard,
   FolderOpen,
@@ -28,7 +29,10 @@ import { defaultParams, IMAGE_MODELS, sanitizeParams, VIDEO_MODELS } from "@/lib
 import { GENERATION_STATUS_LABEL } from "@/lib/types";
 import { cn, usd } from "@/lib/utils";
 
-import { PORT_COLOR, useCanvas, type AssetInputData, type GenData, type ListData, type NoteData, type PortType, type PromptData } from "./canvas-context";
+import { chosenOutput, PORT_COLOR, useCanvas, type AssetInputData, type GenData, type ListData, type NoteData, type PortType, type PromptData } from "./canvas-context";
+
+/** 노드 머리 아이콘 바탕: 이미지는 하늘색, 영상은 보라 */
+const TINT = { image: "rgb(30 167 255 / 0.16)", video: "rgb(164 139 255 / 0.18)" } as const;
 
 function Port({ type, id, port, top, label }: { type: "source" | "target"; id: string; port: PortType; top?: number | string; label?: string }) {
   return (
@@ -76,8 +80,8 @@ function Shell({
   return (
     <div
       className={cn(
-        "relative flex flex-col rounded-2xl border bg-panel/95 shadow-[var(--shadow-soft)] backdrop-blur-xl transition-[border,box-shadow]",
-        selected ? "border-fg/50 shadow-[0_0_0_4px_var(--line)]" : "border-line-2",
+        "relative flex flex-col rounded-2xl border bg-panel/92 shadow-[var(--shadow-soft)] backdrop-blur-xl transition-[border,box-shadow]",
+        selected ? "border-accent/60 shadow-[0_0_0_4px_rgb(30_167_255/0.12),var(--shadow-soft)]" : "border-line-2 hover:border-line-3",
         running && "node-running",
         className,
       )}
@@ -117,7 +121,7 @@ export function PromptNode({ id, data, selected }: NodeProps) {
 
 /* --------------------------------- 리스트 --------------------------------- */
 
-/** 항목마다 한 번씩 연결된 생성 노드를 돌려요 (예: 카메라 앵글 5개 → 5컷) */
+/** 반복 입력: 항목마다 한 번씩 연결된 생성 노드를 돌려요 (예: 카메라 앵글 5개 → 5컷) */
 export function ListNode({ id, data, selected }: NodeProps) {
   const d = data as ListData;
   const { updateNodeData } = useReactFlow();
@@ -135,7 +139,7 @@ export function ListNode({ id, data, selected }: NodeProps) {
     <Shell
       selected={selected}
       icon={<ListOrdered />}
-      title="리스트"
+      title="반복 입력"
       className="w-[290px]"
       right={
         <span className="flex items-center gap-1.5">
@@ -234,7 +238,7 @@ export function ListNode({ id, data, selected }: NodeProps) {
           )}
         </div>
       )}
-      <p className="border-t border-line px-3 py-1.5 text-[10.5px] text-fg-4">연결한 생성 노드가 항목마다 한 번씩 실행돼요</p>
+      <p className="border-t border-line px-3 py-1.5 text-[10.5px] text-fg-4">연결한 생성 노드가 항목마다 한 번씩 돌아요 · 결과는 결과 모음에</p>
       <Port type="source" id={mode === "image" ? "image" : "text"} port={mode === "image" ? "image" : "text"} top="50%" label={mode === "image" ? "이미지 목록" : "텍스트 목록"} />
     </Shell>
   );
@@ -273,7 +277,7 @@ function AssetInputNode({ id, data, selected, kind }: NodeProps & { kind: "image
       icon={kind === "image" ? <ImageIcon /> : <Video />}
       title={kind === "image" ? "이미지" : "영상"}
       className="w-[240px]"
-      accent={kind === "image" ? "rgb(255 91 36 / 0.2)" : "rgb(76 141 255 / 0.2)"}
+      accent={TINT[kind]}
       right={
         d.asset && canEdit ? (
           <button onClick={() => updateNodeData(id, { asset: undefined })} className="rounded p-0.5 text-fg-4 hover:text-fg" aria-label="비우기">
@@ -314,7 +318,8 @@ export function VideoInputNode(props: NodeProps) {
 
 function GenNode({ id, data, selected, kind }: NodeProps & { kind: "image" | "video" }) {
   const d = data as GenData;
-  const { runNode, canEdit, status, openAsset, fanOut } = useCanvas();
+  const { runNode, canEdit, status, openAsset, fanOut, nodeLabel, resultCount, openResults } = useCanvas();
+  const results = resultCount(id);
   const times = fanOut(id);
   const { updateNodeData } = useReactFlow();
   const models = kind === "image" ? IMAGE_MODELS : VIDEO_MODELS;
@@ -332,8 +337,7 @@ function GenNode({ id, data, selected, kind }: NodeProps & { kind: "image" | "vi
       ),
     0,
   );
-  const selectedIdx = d.selected ?? 0;
-  const output = d.outputs?.[selectedIdx];
+  const output = chosenOutput(d);
 
   const inputs =
     kind === "image"
@@ -353,8 +357,8 @@ function GenNode({ id, data, selected, kind }: NodeProps & { kind: "image" | "vi
     <Shell
       selected={selected}
       icon={kind === "image" ? <ImagePlus /> : <Clapperboard />}
-      title={kind === "image" ? "이미지 생성" : "영상 생성"}
-      accent={kind === "image" ? "rgb(255 91 36 / 0.22)" : "rgb(76 141 255 / 0.22)"}
+      title={nodeLabel(id)}
+      accent={TINT[kind]}
       className="w-[340px]"
       running={!!running}
       right={
@@ -439,24 +443,41 @@ function GenNode({ id, data, selected, kind }: NodeProps & { kind: "image" | "vi
             )}
             {(d.outputs?.length ?? 0) > 1 && (
               <div className="nodrag flex gap-1.5 overflow-x-auto scrollbar-none">
-                {d.outputs!.map((o, i) => (
-                  <Tip key={o.id} content={i === selectedIdx ? "다음 노드로 전달되는 컷" : "이 컷을 다음 노드로"}>
-                    <button
-                      onClick={() => updateNodeData(id, { selected: i })}
-                      className={cn("relative size-12 shrink-0 overflow-hidden rounded-lg border-2", i === selectedIdx ? "border-fg" : "border-transparent opacity-70 hover:opacity-100")}
-                    >
-                      <MediaThumb kind={o.kind} thumb={o.urls.thumb} src={o.urls.src} autoPlayOnHover={false} />
-                      {i === selectedIdx && (
-                        <span className="absolute right-0.5 top-0.5 flex size-3.5 items-center justify-center rounded-full bg-inv text-inv-fg">
-                          <Check className="size-2.5" />
-                        </span>
-                      )}
-                    </button>
-                  </Tip>
-                ))}
+                {d.outputs!.map((o, i) => {
+                  const on = o.id === output?.id;
+                  return (
+                    <Tip key={o.id} content={on ? "다음 노드로 넘어가는 결과" : "이 결과를 다음 노드로"}>
+                      <button
+                        onClick={() => updateNodeData(id, { selected: i, pickId: o.id })}
+                        className={cn("relative size-12 shrink-0 overflow-hidden rounded-lg border-2 transition", on ? "border-accent" : "border-transparent opacity-60 hover:opacity-100")}
+                      >
+                        <MediaThumb kind={o.kind} thumb={o.urls.thumb} src={o.urls.src} autoPlayOnHover={false} />
+                        {on && (
+                          <span className="absolute right-0.5 top-0.5 flex size-3.5 items-center justify-center rounded-full bg-accent text-on-accent">
+                            <Check className="size-2.5" />
+                          </span>
+                        )}
+                      </button>
+                    </Tip>
+                  );
+                })}
               </div>
             )}
           </div>
+        )}
+        {results > 0 && (
+          <button
+            type="button"
+            onClick={() => openResults(id)}
+            className="nodrag -mb-1 flex items-center justify-between rounded-lg border border-line px-2.5 py-1.5 text-[11.5px] text-fg-3 transition hover:border-line-3 hover:text-fg"
+          >
+            <span>
+              지금까지 결과 <span className="font-mono tabular-nums text-fg">{results}</span>개
+            </span>
+            <span className="flex items-center gap-0.5">
+              결과 모음 <ArrowUpRight className="size-3.5" />
+            </span>
+          </button>
         )}
       </div>
       <Port type="source" id={kind} port={kind} top="50%" label={kind === "image" ? "이미지" : "영상"} />

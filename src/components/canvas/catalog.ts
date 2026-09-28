@@ -35,14 +35,14 @@ export const NODE_DEFS: NodeDef[] = [
   },
   {
     type: "list",
-    label: "리스트",
-    desc: "여러 항목을 하나씩 돌려 한 번에 여러 컷",
+    label: "반복 입력",
+    desc: "줄마다·장마다 한 번씩 돌려 한 번에 여러 컷",
     icon: ListOrdered,
     tone: "text",
     make: () => ({ mode: "text", items: ["", ""], assets: [] }),
     inputs: [],
     outputs: (d) => (d.mode === "image" ? [{ id: "image", port: "image", label: "이미지 목록" }] : [{ id: "text", port: "text", label: "텍스트 목록" }]),
-    keywords: "list batch 리스트 목록 배치 여러개 변형 variation",
+    keywords: "list batch iterate 반복 리스트 목록 배치 여러개 변형 variation",
   },
   {
     type: "imageInput",

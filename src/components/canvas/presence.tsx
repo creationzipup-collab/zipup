@@ -21,7 +21,7 @@ type Handlers = {
   onClear: () => void;
 };
 
-const PEER_COLORS = ["#ff5b24", "#4c8dff", "#34d399", "#f5c542", "#c084fc", "#f472b6", "#22d3ee"];
+const PEER_COLORS = ["#1ea7ff", "#a48bff", "#3ddc97", "#f5b83d", "#ff7ca8", "#7cf7ff", "#ff8a5c"];
 
 export function colorFor(id: string) {
   let h = 0;

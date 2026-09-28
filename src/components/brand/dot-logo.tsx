@@ -33,7 +33,7 @@ export function DotLogo({ className, gap = 7, radius = 1.55, lines = "both" }: {
     const pointer = { x: -9999, y: -9999, active: false };
     const style = getComputedStyle(el);
     const fg = style.getPropertyValue("--fg").trim() || "#f4f4f5";
-    const accent = style.getPropertyValue("--accent").trim() || "#ff5b24";
+    const accent = style.getPropertyValue("--accent").trim() || "#1ea7ff";
 
     // 로고 모양을 격자로 훑어 점 위치 만들기
     function build() {

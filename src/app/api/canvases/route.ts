@@ -45,7 +45,7 @@ function templateGraph(t: string) {
         { id: "p1", type: "prompt", position: { x: 0, y: 80 }, data: { text: "귀여운 3D 마스코트 캐릭터, 흰 배경, 스튜디오 조명" } },
         { id: "i1", type: "imageInput", position: { x: 0, y: 330 }, data: {} },
         { id: "g1", type: "imageGen", position: { x: 380, y: 60 }, data: { modelId: "nano-banana-pro", params: { aspectRatio: "1:1", resolution: "2K" }, count: 2, text: "정면" } },
-        { id: "g2", type: "imageGen", position: { x: 380, y: 420 }, data: { modelId: "nano-banana-pro", params: { aspectRatio: "1:1", resolution: "2K" }, count: 2, text: "측면, 같은 캐릭터" } },
+        { id: "g2", type: "imageGen", position: { x: 820, y: 60 }, data: { modelId: "nano-banana-pro", params: { aspectRatio: "1:1", resolution: "2K" }, count: 2, text: "측면, 같은 캐릭터" } },
       ],
       edges: [
         { id: "e1", source: "p1", sourceHandle: "text", target: "g1", targetHandle: "prompt" },

@@ -50,7 +50,7 @@ export function snapToGuides(change: NodePositionChange, nodes: Node[], threshol
 /* ---------------------------------- 되돌리기 ---------------------------------- */
 
 /** 실행 결과처럼 되돌리면 안 되는 값은 기록에서 뺌 */
-const RUNTIME = ["runs", "status", "outputs", "error", "selected"];
+const RUNTIME = ["runs", "status", "outputs", "error", "selected", "pickId"];
 
 export type Snapshot = { nodes: Node[]; edges: Edge[]; sketch: Stroke[] };
 

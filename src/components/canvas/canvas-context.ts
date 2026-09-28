@@ -9,7 +9,7 @@ import type { GenerationStatus } from "@/lib/types";
 export type PromptData = { text: string };
 export type AssetInputData = { asset?: RefAsset };
 export type NoteData = { text: string };
-/** 리스트: 항목마다 한 번씩 돌려 여러 컷을 한 번에 */
+/** 반복 입력: 항목마다 한 번씩 돌려 여러 컷을 한 번에 */
 export type ListData = { mode: "text" | "image"; items: string[]; assets: RefAsset[] };
 export type GenData = {
   modelId: string;
@@ -20,6 +20,8 @@ export type GenData = {
   runs?: string[];
   outputs?: RefAsset[];
   selected?: number;
+  /** 다음 노드로 넘길 결과 (결과 모음에서 고른 것). 없으면 selected 번째 */
+  pickId?: string | null;
   status?: GenerationStatus;
   error?: string | null;
 };
@@ -32,8 +34,14 @@ export type CanvasCtx = {
   runNode: (id: string) => Promise<void>;
   pickAsset: (nodeId: string, kind: "image" | "video", multiple?: boolean) => void;
   openAsset: (asset: RefAsset) => void;
-  /** 연결된 리스트 때문에 이 노드가 몇 번 돌아가는지 */
+  /** 연결된 반복 입력 때문에 이 노드가 몇 번 돌아가는지 */
   fanOut: (nodeId: string) => number;
+  /** 같은 종류가 여러 개일 때 붙는 번호까지 넣은 노드 이름 (예: 이미지 생성 2) */
+  nodeLabel: (nodeId: string) => string;
+  /** 이 노드가 지금까지 만든 결과 수 (모든 실행) */
+  resultCount: (nodeId: string) => number;
+  /** 결과 모음을 이 노드 것만 보이게 열기 */
+  openResults: (nodeId: string) => void;
 };
 
 export const CanvasContext = React.createContext<CanvasCtx | null>(null);
@@ -44,11 +52,16 @@ export function useCanvas(): CanvasCtx {
   return c;
 }
 
-/** 포트 타입별 색 */
-export const PORT_COLOR = { text: "#f4f4f5", image: "#ff5b24", video: "#4c8dff" } as const;
+/** 포트 타입별 색: 글은 흰색, 이미지는 하늘색, 영상은 보라 */
+export const PORT_COLOR = { text: "#dfe8f2", image: "#1ea7ff", video: "#a48bff" } as const;
 export type PortType = keyof typeof PORT_COLOR;
 
 /** 핸들 id → 데이터 타입 */
+/** 다음 노드로 넘어가는 결과 */
+export function chosenOutput(d: Pick<GenData, "outputs" | "selected" | "pickId">): RefAsset | undefined {
+  return (d.pickId ? d.outputs?.find((o) => o.id === d.pickId) : undefined) ?? d.outputs?.[d.selected ?? 0];
+}
+
 export function portType(nodeType: string | undefined, handle: string | null | undefined): PortType | null {
   if (!handle) return null;
   if (handle === "text" || handle === "prompt") return "text";
