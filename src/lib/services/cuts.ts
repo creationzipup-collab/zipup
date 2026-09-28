@@ -447,19 +447,3 @@ export async function exportList(
 function csvCell(v: string): string {
   return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 }
-
-/* ---------------------------------- 홈 ---------------------------------- */
-
-/** 진행 중인 컷 (홈): 내가 담당이거나 최근 작업한 것 먼저 */
-export async function activeCuts(u: CurrentUser, projectIds: string[], limit = 8) {
-  if (!projectIds.length) return [];
-  const rows = await db
-    .select({ c: cuts, projectName: projects.name, projectColor: projects.color, assigneeName: user.name })
-    .from(cuts)
-    .innerJoin(projects, eq(projects.id, cuts.projectId))
-    .leftJoin(user, eq(user.id, cuts.assigneeId))
-    .where(and(inArray(cuts.projectId, projectIds), inArray(cuts.status, ["wip", "review"]), isNull(projects.archivedAt)))
-    .orderBy(sql`${cuts.assigneeId} = ${u.id} desc nulls last`, desc(cuts.lastActivityAt))
-    .limit(limit);
-  return rows;
-}
